@@ -1,15 +1,8 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// does not test any rustfixable lints
 
 #![warn(clippy::mixed_case_hex_literals)]
-#![warn(clippy::unseparated_literal_suffix)]
 #![warn(clippy::zero_prefixed_literal)]
+#![allow(clippy::unseparated_literal_suffix)]
 #![allow(dead_code)]
 
 fn main() {
@@ -23,15 +16,6 @@ fn main() {
     let fail2 = 0xabCD_isize;
     let fail_multi_zero = 000_123usize;
 
-    let ok6 = 1234_i32;
-    let ok7 = 1234_f32;
-    let ok8 = 1234_isize;
-    let fail3 = 1234i32;
-    let fail4 = 1234u32;
-    let fail5 = 1234isize;
-    let fail6 = 1234usize;
-    let fail7 = 1.5f32;
-
     let ok9 = 0;
     let ok10 = 0_i64;
     let fail8 = 0123;
@@ -44,28 +28,9 @@ fn main() {
     let ok15 = 0xab_cabc_abca_bcab_cabc;
     let ok16 = 0xFE_BAFE_ABAB_ABCD;
     let ok17 = 0x123_4567_8901_usize;
+    let ok18 = 0xF;
 
-    let fail9 = 0xabcdef;
-    let fail10 = 0xBAFEBAFE;
-    let fail11 = 0xabcdeff;
-    let fail12 = 0xabcabcabcabcabcabc;
-    let fail13 = 0x1_23456_78901_usize;
-
-    let fail14 = 2_32;
-    let fail15 = 4_64;
-    let fail16 = 7_8;
-    let fail17 = 23_16;
-    let ok18 = 23_128;
     let fail19 = 12_3456_21;
-    let fail20 = 2__8;
-    let fail21 = 4___16;
     let fail22 = 3__4___23;
     let fail23 = 3__16___23;
-
-    let fail24 = 12.34_64;
-    let fail25 = 1E2_32;
-    let fail26 = 43E7_64;
-    let fail27 = 243E17_32;
-    let fail28 = 241251235E723_64;
-    let fail29 = 42279.911_32;
 }

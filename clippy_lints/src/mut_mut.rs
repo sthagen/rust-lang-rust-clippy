@@ -1,65 +1,53 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::hir;
-use crate::rustc::hir::intravisit;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass, in_external_macro, LintContext};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc::ty;
 use crate::utils::{higher, span_lint};
+use rustc::hir::map::Map;
+use rustc::lint::in_external_macro;
+use rustc::ty;
+use rustc_hir as hir;
+use rustc_hir::intravisit;
+use rustc_lint::{LateContext, LateLintPass, LintContext};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for instances of `mut mut` references.
-///
-/// **Why is this bad?** Multiple `mut`s don't add anything meaningful to the
-/// source. This is either a copy'n'paste error, or it shows a fundamental
-/// misunderstanding of references.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// let x = &mut &mut y;
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for instances of `mut mut` references.
+    ///
+    /// **Why is this bad?** Multiple `mut`s don't add anything meaningful to the
+    /// source. This is either a copy'n'paste error, or it shows a fundamental
+    /// misunderstanding of references.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let mut y = 1;
+    /// let x = &mut &mut y;
+    /// ```
     pub MUT_MUT,
     pedantic,
-    "usage of double-mut refs, e.g. `&mut &mut ...`"
+    "usage of double-mut refs, e.g., `&mut &mut ...`"
 }
 
-#[derive(Copy, Clone)]
-pub struct MutMut;
-
-impl LintPass for MutMut {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(MUT_MUT)
-    }
-}
+declare_lint_pass!(MutMut => [MUT_MUT]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for MutMut {
-    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx hir::Block) {
+    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx hir::Block<'_>) {
         intravisit::walk_block(&mut MutVisitor { cx }, block);
     }
 
-    fn check_ty(&mut self, cx: &LateContext<'a, 'tcx>, ty: &'tcx hir::Ty) {
-        use crate::rustc::hir::intravisit::Visitor;
+    fn check_ty(&mut self, cx: &LateContext<'a, 'tcx>, ty: &'tcx hir::Ty<'_>) {
+        use rustc_hir::intravisit::Visitor;
 
         MutVisitor { cx }.visit_ty(ty);
     }
 }
 
-pub struct MutVisitor<'a, 'tcx: 'a> {
+pub struct MutVisitor<'a, 'tcx> {
     cx: &'a LateContext<'a, 'tcx>,
 }
 
 impl<'a, 'tcx> intravisit::Visitor<'tcx> for MutVisitor<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
+    type Map = Map<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'_>) {
         if in_external_macro(self.cx.sess(), expr.span) {
             return;
         }
@@ -73,20 +61,15 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for MutVisitor<'a, 'tcx> {
             // Let's ignore the generated code.
             intravisit::walk_expr(self, arg);
             intravisit::walk_expr(self, body);
-        } else if let hir::ExprKind::AddrOf(hir::MutMutable, ref e) = expr.node {
-            if let hir::ExprKind::AddrOf(hir::MutMutable, _) = e.node {
+        } else if let hir::ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, ref e) = expr.kind {
+            if let hir::ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, _) = e.kind {
                 span_lint(
                     self.cx,
                     MUT_MUT,
                     expr.span,
                     "generally you want to avoid `&mut &mut _` if possible",
                 );
-            } else if let ty::Ref(
-                _,
-                _,
-                hir::MutMutable,
-            ) = self.cx.tables.expr_ty(e).sty
-            {
+            } else if let ty::Ref(_, _, hir::Mutability::Mut) = self.cx.tables.expr_ty(e).kind {
                 span_lint(
                     self.cx,
                     MUT_MUT,
@@ -97,22 +80,22 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for MutVisitor<'a, 'tcx> {
         }
     }
 
-    fn visit_ty(&mut self, ty: &'tcx hir::Ty) {
+    fn visit_ty(&mut self, ty: &'tcx hir::Ty<'_>) {
         if let hir::TyKind::Rptr(
             _,
             hir::MutTy {
                 ty: ref pty,
-                mutbl: hir::MutMutable,
+                mutbl: hir::Mutability::Mut,
             },
-        ) = ty.node
+        ) = ty.kind
         {
             if let hir::TyKind::Rptr(
                 _,
                 hir::MutTy {
-                    mutbl: hir::MutMutable,
+                    mutbl: hir::Mutability::Mut,
                     ..
                 },
-            ) = pty.node
+            ) = pty.kind
             {
                 span_lint(
                     self.cx,
@@ -125,7 +108,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for MutVisitor<'a, 'tcx> {
 
         intravisit::walk_ty(self, ty);
     }
-    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
+    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<'_, Self::Map> {
         intravisit::NestedVisitorMap::None
     }
 }

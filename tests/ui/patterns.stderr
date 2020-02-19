@@ -1,8 +1,8 @@
 error: the `y @ _` pattern can be written as just `y`
-  --> $DIR/patterns.rs:20:9
+  --> $DIR/patterns.rs:10:9
    |
-20 |         y @ _   => (),
-   |         ^^^^^
+LL |         y @ _ => (),
+   |         ^^^^^ help: try: `y`
    |
    = note: `-D clippy::redundant-pattern` implied by `-D warnings`
 

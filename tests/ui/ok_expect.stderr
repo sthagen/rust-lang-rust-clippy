@@ -1,34 +1,43 @@
-error: called `ok().expect()` on a Result value. You can call `expect` directly on the `Result`
-  --> $DIR/ok_expect.rs:24:5
+error: called `ok().expect()` on a `Result` value
+  --> $DIR/ok_expect.rs:14:5
    |
-24 |     res.ok().expect("disaster!");
+LL |     res.ok().expect("disaster!");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: `-D clippy::ok-expect` implied by `-D warnings`
+   = help: you can call `expect()` directly on the `Result`
 
-error: called `ok().expect()` on a Result value. You can call `expect` directly on the `Result`
-  --> $DIR/ok_expect.rs:30:5
+error: called `ok().expect()` on a `Result` value
+  --> $DIR/ok_expect.rs:20:5
    |
-30 |     res3.ok().expect("whoof");
+LL |     res3.ok().expect("whoof");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-error: called `ok().expect()` on a Result value. You can call `expect` directly on the `Result`
-  --> $DIR/ok_expect.rs:32:5
    |
-32 |     res4.ok().expect("argh");
+   = help: you can call `expect()` directly on the `Result`
+
+error: called `ok().expect()` on a `Result` value
+  --> $DIR/ok_expect.rs:22:5
+   |
+LL |     res4.ok().expect("argh");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^
-
-error: called `ok().expect()` on a Result value. You can call `expect` directly on the `Result`
-  --> $DIR/ok_expect.rs:34:5
    |
-34 |     res5.ok().expect("oops");
+   = help: you can call `expect()` directly on the `Result`
+
+error: called `ok().expect()` on a `Result` value
+  --> $DIR/ok_expect.rs:24:5
+   |
+LL |     res5.ok().expect("oops");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^
-
-error: called `ok().expect()` on a Result value. You can call `expect` directly on the `Result`
-  --> $DIR/ok_expect.rs:36:5
    |
-36 |     res6.ok().expect("meh");
+   = help: you can call `expect()` directly on the `Result`
+
+error: called `ok().expect()` on a `Result` value
+  --> $DIR/ok_expect.rs:26:5
+   |
+LL |     res6.ok().expect("meh");
    |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: you can call `expect()` directly on the `Result`
 
 error: aborting due to 5 previous errors
 

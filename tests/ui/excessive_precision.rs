@@ -1,16 +1,6 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
+// run-rustfix
 #![warn(clippy::excessive_precision)]
-#![allow(clippy::print_literal)]
+#![allow(dead_code, unused_variables, clippy::print_literal)]
 
 fn main() {
     // Consts
@@ -70,4 +60,26 @@ fn main() {
 
     // issue #2840
     let num = 0.000_000_000_01e-10f64;
+
+    // Lossy whole-number float literals
+    let _: f32 = 16_777_217.0;
+    let _: f32 = 16_777_219.0;
+    let _: f32 = 16_777_219.;
+    let _: f32 = 16_777_219.000;
+    let _ = 16_777_219f32;
+    let _: f32 = -16_777_219.0;
+    let _: f64 = 9_007_199_254_740_993.0;
+    let _: f64 = 9_007_199_254_740_993.;
+    let _: f64 = 9_007_199_254_740_993.000;
+    let _ = 9_007_199_254_740_993f64;
+    let _: f64 = -9_007_199_254_740_993.0;
+
+    // Lossless whole number float literals
+    let _: f32 = 16_777_216.0;
+    let _: f32 = 16_777_218.0;
+    let _: f32 = 16_777_220.0;
+    let _: f32 = -16_777_216.0;
+    let _: f32 = -16_777_220.0;
+    let _: f64 = 9_007_199_254_740_992.0;
+    let _: f64 = -9_007_199_254_740_992.0;
 }

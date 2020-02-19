@@ -1,100 +1,90 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
+use crate::utils::{higher, qpath_res, snippet, span_lint_and_then};
 use if_chain::if_chain;
-use crate::rustc::hir;
-use crate::rustc::hir::BindingAnnotation;
-use crate::rustc::hir::def::Def;
-use crate::syntax::ast;
-use crate::utils::{snippet, span_lint_and_then};
-use crate::rustc_errors::Applicability;
+use rustc::hir::map::Map;
+use rustc_errors::Applicability;
+use rustc_hir as hir;
+use rustc_hir::def::Res;
+use rustc_hir::intravisit;
+use rustc_hir::BindingAnnotation;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for variable declarations immediately followed by a
-/// conditional affectation.
-///
-/// **Why is this bad?** This is not idiomatic Rust.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust,ignore
-/// let foo;
-///
-/// if bar() {
-///     foo = 42;
-/// } else {
-///     foo = 0;
-/// }
-///
-/// let mut baz = None;
-///
-/// if bar() {
-///     baz = Some(42);
-/// }
-/// ```
-///
-/// should be written
-///
-/// ```rust,ignore
-/// let foo = if bar() {
-///     42
-/// } else {
-///     0
-/// };
-///
-/// let baz = if bar() {
-///     Some(42)
-/// } else {
-///     None
-/// };
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for variable declarations immediately followed by a
+    /// conditional affectation.
+    ///
+    /// **Why is this bad?** This is not idiomatic Rust.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust,ignore
+    /// let foo;
+    ///
+    /// if bar() {
+    ///     foo = 42;
+    /// } else {
+    ///     foo = 0;
+    /// }
+    ///
+    /// let mut baz = None;
+    ///
+    /// if bar() {
+    ///     baz = Some(42);
+    /// }
+    /// ```
+    ///
+    /// should be written
+    ///
+    /// ```rust,ignore
+    /// let foo = if bar() {
+    ///     42
+    /// } else {
+    ///     0
+    /// };
+    ///
+    /// let baz = if bar() {
+    ///     Some(42)
+    /// } else {
+    ///     None
+    /// };
+    /// ```
     pub USELESS_LET_IF_SEQ,
     style,
     "unidiomatic `let mut` declaration followed by initialization in `if`"
 }
 
-#[derive(Copy, Clone)]
-pub struct LetIfSeq;
-
-impl LintPass for LetIfSeq {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(USELESS_LET_IF_SEQ)
-    }
-}
+declare_lint_pass!(LetIfSeq => [USELESS_LET_IF_SEQ]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for LetIfSeq {
-    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx hir::Block) {
+    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx hir::Block<'_>) {
         let mut it = block.stmts.iter().peekable();
         while let Some(stmt) = it.next() {
             if_chain! {
                 if let Some(expr) = it.peek();
-                if let hir::StmtKind::Decl(ref decl, _) = stmt.node;
-                if let hir::DeclKind::Local(ref decl) = decl.node;
-                if let hir::PatKind::Binding(mode, canonical_id, ident, None) = decl.pat.node;
-                if let hir::StmtKind::Expr(ref if_, _) = expr.node;
-                if let hir::ExprKind::If(ref cond, ref then, ref else_) = if_.node;
+                if let hir::StmtKind::Local(ref local) = stmt.kind;
+                if let hir::PatKind::Binding(mode, canonical_id, ident, None) = local.pat.kind;
+                if let hir::StmtKind::Expr(ref if_) = expr.kind;
+                if let Some((ref cond, ref then, ref else_)) = higher::if_block(&if_);
                 if !used_in_expr(cx, canonical_id, cond);
-                if let hir::ExprKind::Block(ref then, _) = then.node;
+                if let hir::ExprKind::Block(ref then, _) = then.kind;
                 if let Some(value) = check_assign(cx, canonical_id, &*then);
                 if !used_in_expr(cx, canonical_id, value);
                 then {
                     let span = stmt.span.to(if_.span);
 
+                    let has_interior_mutability = !cx.tables.node_type(canonical_id).is_freeze(
+                        cx.tcx,
+                        cx.param_env,
+                        span
+                    );
+                    if has_interior_mutability { return; }
+
                     let (default_multi_stmts, default) = if let Some(ref else_) = *else_ {
-                        if let hir::ExprKind::Block(ref else_, _) = else_.node {
+                        if let hir::ExprKind::Block(ref else_, _) = else_.kind {
                             if let Some(default) = check_assign(cx, canonical_id, else_) {
                                 (else_.stmts.len() > 1, default)
-                            } else if let Some(ref default) = decl.init {
+                            } else if let Some(ref default) = local.init {
                                 (true, &**default)
                             } else {
                                 continue;
@@ -102,7 +92,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for LetIfSeq {
                         } else {
                             continue;
                         }
-                    } else if let Some(ref default) = decl.init {
+                    } else if let Some(ref default) = local.init {
                         (false, &**default)
                     } else {
                         continue;
@@ -131,7 +121,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for LetIfSeq {
                                        span,
                                        "`if _ { .. } else { .. }` is an expression",
                                        |db| {
-                                           db.span_suggestion_with_applicability(
+                                           db.span_suggestion(
                                                 span,
                                                 "it is more idiomatic to write",
                                                 sug,
@@ -147,42 +137,44 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for LetIfSeq {
     }
 }
 
-struct UsedVisitor<'a, 'tcx: 'a> {
+struct UsedVisitor<'a, 'tcx> {
     cx: &'a LateContext<'a, 'tcx>,
-    id: ast::NodeId,
+    id: hir::HirId,
     used: bool,
 }
 
-impl<'a, 'tcx> hir::intravisit::Visitor<'tcx> for UsedVisitor<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
+impl<'a, 'tcx> intravisit::Visitor<'tcx> for UsedVisitor<'a, 'tcx> {
+    type Map = Map<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'_>) {
         if_chain! {
-            if let hir::ExprKind::Path(ref qpath) = expr.node;
-            if let Def::Local(local_id) = self.cx.tables.qpath_def(qpath, expr.hir_id);
+            if let hir::ExprKind::Path(ref qpath) = expr.kind;
+            if let Res::Local(local_id) = qpath_res(self.cx, qpath, expr.hir_id);
             if self.id == local_id;
             then {
                 self.used = true;
                 return;
             }
         }
-        hir::intravisit::walk_expr(self, expr);
+        intravisit::walk_expr(self, expr);
     }
-    fn nested_visit_map<'this>(&'this mut self) -> hir::intravisit::NestedVisitorMap<'this, 'tcx> {
-        hir::intravisit::NestedVisitorMap::None
+    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<'_, Self::Map> {
+        intravisit::NestedVisitorMap::None
     }
 }
 
 fn check_assign<'a, 'tcx>(
     cx: &LateContext<'a, 'tcx>,
-    decl: ast::NodeId,
-    block: &'tcx hir::Block,
-) -> Option<&'tcx hir::Expr> {
+    decl: hir::HirId,
+    block: &'tcx hir::Block<'_>,
+) -> Option<&'tcx hir::Expr<'tcx>> {
     if_chain! {
         if block.expr.is_none();
         if let Some(expr) = block.stmts.iter().last();
-        if let hir::StmtKind::Semi(ref expr, _) = expr.node;
-        if let hir::ExprKind::Assign(ref var, ref value) = expr.node;
-        if let hir::ExprKind::Path(ref qpath) = var.node;
-        if let Def::Local(local_id) = cx.tables.qpath_def(qpath, var.hir_id);
+        if let hir::StmtKind::Semi(ref expr) = expr.kind;
+        if let hir::ExprKind::Assign(ref var, ref value, _) = expr.kind;
+        if let hir::ExprKind::Path(ref qpath) = var.kind;
+        if let Res::Local(local_id) = qpath_res(cx, qpath, var.hir_id);
         if decl == local_id;
         then {
             let mut v = UsedVisitor {
@@ -192,7 +184,7 @@ fn check_assign<'a, 'tcx>(
             };
 
             for s in block.stmts.iter().take(block.stmts.len()-1) {
-                hir::intravisit::walk_stmt(&mut v, s);
+                intravisit::walk_stmt(&mut v, s);
 
                 if v.used {
                     return None;
@@ -206,12 +198,8 @@ fn check_assign<'a, 'tcx>(
     None
 }
 
-fn used_in_expr<'a, 'tcx: 'a>(cx: &LateContext<'a, 'tcx>, id: ast::NodeId, expr: &'tcx hir::Expr) -> bool {
-    let mut v = UsedVisitor {
-        cx,
-        id,
-        used: false,
-    };
-    hir::intravisit::walk_expr(&mut v, expr);
+fn used_in_expr<'a, 'tcx>(cx: &LateContext<'a, 'tcx>, id: hir::HirId, expr: &'tcx hir::Expr<'_>) -> bool {
+    let mut v = UsedVisitor { cx, id, used: false };
+    intravisit::walk_expr(&mut v, expr);
     v.used
 }

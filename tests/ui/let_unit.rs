@@ -1,34 +1,26 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
+// run-rustfix
 
 #![warn(clippy::let_unit_value)]
+#![allow(clippy::no_effect)]
 #![allow(unused_variables)]
 
 macro_rules! let_and_return {
     ($n:expr) => {{
         let ret = $n;
-    }}
+    }};
 }
 
 fn main() {
     let _x = println!("x");
-    let _y = 1;   // this is fine
-    let _z = ((), 1);  // this as well
+    let _y = 1; // this is fine
+    let _z = ((), 1); // this as well
     if true {
         let _a = ();
     }
 
     consume_units_with_for_loop(); // should be fine as well
+
+    multiline_sugg();
 
     let_and_return!(()) // should be fine
 }
@@ -53,6 +45,18 @@ fn consume_units_with_for_loop() {
         count += 1;
     }
     assert_eq!(count, 1);
+}
+
+fn multiline_sugg() {
+    let v: Vec<u8> = vec![2];
+
+    let _ = v
+        .into_iter()
+        .map(|i| i * 2)
+        .filter(|i| i % 2 == 0)
+        .map(|_| ())
+        .next()
+        .unwrap();
 }
 
 #[derive(Copy, Clone)]

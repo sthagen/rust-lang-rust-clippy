@@ -1,144 +1,145 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use matches::matches;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc::hir::*;
-use crate::rustc::hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
 use crate::utils::*;
+use matches::matches;
+use rustc::hir::map::Map;
+use rustc::lint::in_external_macro;
+use rustc_errors::Applicability;
+use rustc_hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass, LintContext};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for `if` conditions that use blocks to contain an
-/// expression.
-///
-/// **Why is this bad?** It isn't really Rust style, same as using parentheses
-/// to contain expressions.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// if { true } ..
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for `if` conditions that use blocks to contain an
+    /// expression.
+    ///
+    /// **Why is this bad?** It isn't really Rust style, same as using parentheses
+    /// to contain expressions.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// if { true } { /* ... */ }
+    /// ```
     pub BLOCK_IN_IF_CONDITION_EXPR,
     style,
-    "braces that can be eliminated in conditions, e.g. `if { true } ...`"
+    "braces that can be eliminated in conditions, e.g., `if { true } ...`"
 }
 
-/// **What it does:** Checks for `if` conditions that use blocks containing
-/// statements, or conditions that use closures with blocks.
-///
-/// **Why is this bad?** Using blocks in the condition makes it hard to read.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// if { let x = somefunc(); x } ..
-/// // or
-/// if somefunc(|x| { x == 47 }) ..
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for `if` conditions that use blocks containing
+    /// statements, or conditions that use closures with blocks.
+    ///
+    /// **Why is this bad?** Using blocks in the condition makes it hard to read.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// if { let x = somefunc(); x } {}
+    /// // or
+    /// if somefunc(|x| { x == 47 }) {}
+    /// ```
     pub BLOCK_IN_IF_CONDITION_STMT,
     style,
-    "complex blocks in conditions, e.g. `if { let x = true; x } ...`"
+    "complex blocks in conditions, e.g., `if { let x = true; x } ...`"
 }
 
-#[derive(Copy, Clone)]
-pub struct BlockInIfCondition;
+declare_lint_pass!(BlockInIfCondition => [BLOCK_IN_IF_CONDITION_EXPR, BLOCK_IN_IF_CONDITION_STMT]);
 
-impl LintPass for BlockInIfCondition {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(BLOCK_IN_IF_CONDITION_EXPR, BLOCK_IN_IF_CONDITION_STMT)
-    }
-}
-
-struct ExVisitor<'a, 'tcx: 'a> {
-    found_block: Option<&'tcx Expr>,
+struct ExVisitor<'a, 'tcx> {
+    found_block: Option<&'tcx Expr<'tcx>>,
     cx: &'a LateContext<'a, 'tcx>,
 }
 
-impl<'a, 'tcx: 'a> Visitor<'tcx> for ExVisitor<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx Expr) {
-        if let ExprKind::Closure(_, _, eid, _, _) = expr.node {
-            let body = self.cx.tcx.hir.body(eid);
+impl<'a, 'tcx> Visitor<'tcx> for ExVisitor<'a, 'tcx> {
+    type Map = Map<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+        if let ExprKind::Closure(_, _, eid, _, _) = expr.kind {
+            let body = self.cx.tcx.hir().body(eid);
             let ex = &body.value;
-            if matches!(ex.node, ExprKind::Block(_, _)) {
+            if matches!(ex.kind, ExprKind::Block(_, _)) && !body.value.span.from_expansion() {
                 self.found_block = Some(ex);
                 return;
             }
         }
         walk_expr(self, expr);
     }
-    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
+    fn nested_visit_map(&mut self) -> NestedVisitorMap<'_, Self::Map> {
         NestedVisitorMap::None
     }
 }
 
 const BRACED_EXPR_MESSAGE: &str = "omit braces around single expression condition";
-const COMPLEX_BLOCK_MESSAGE: &str = "in an 'if' condition, avoid complex blocks or closures with blocks; \
-                                     instead, move the block or closure higher and bind it with a 'let'";
+const COMPLEX_BLOCK_MESSAGE: &str = "in an `if` condition, avoid complex blocks or closures with blocks; \
+                                     instead, move the block or closure higher and bind it with a `let`";
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for BlockInIfCondition {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
-        if let ExprKind::If(ref check, ref then, _) = expr.node {
-            if let ExprKind::Block(ref block, _) = check.node {
-                if block.rules == DefaultBlock {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
+        if in_external_macro(cx.sess(), expr.span) {
+            return;
+        }
+        if let Some((cond, _, _)) = higher::if_block(&expr) {
+            if let ExprKind::Block(block, _) = &cond.kind {
+                if block.rules == BlockCheckMode::DefaultBlock {
                     if block.stmts.is_empty() {
-                        if let Some(ref ex) = block.expr {
+                        if let Some(ex) = &block.expr {
                             // don't dig into the expression here, just suggest that they remove
                             // the block
-                            if in_macro(expr.span) || differing_macro_contexts(expr.span, ex.span) {
+                            if expr.span.from_expansion() || differing_macro_contexts(expr.span, ex.span) {
                                 return;
                             }
-                            span_help_and_lint(
+                            let mut applicability = Applicability::MachineApplicable;
+                            span_lint_and_sugg(
                                 cx,
                                 BLOCK_IN_IF_CONDITION_EXPR,
-                                check.span,
+                                cond.span,
                                 BRACED_EXPR_MESSAGE,
-                                &format!(
-                                    "try\nif {} {} ... ",
-                                    snippet_block(cx, ex.span, ".."),
-                                    snippet_block(cx, then.span, "..")
+                                "try",
+                                format!(
+                                    "{}",
+                                    snippet_block_with_applicability(
+                                        cx,
+                                        ex.span,
+                                        "..",
+                                        Some(expr.span),
+                                        &mut applicability
+                                    )
                                 ),
+                                applicability,
                             );
                         }
                     } else {
-                        let span = block
-                            .expr
-                            .as_ref()
-                            .map_or_else(|| block.stmts[0].span, |e| e.span);
-                        if in_macro(span) || differing_macro_contexts(expr.span, span) {
+                        let span = block.expr.as_ref().map_or_else(|| block.stmts[0].span, |e| e.span);
+                        if span.from_expansion() || differing_macro_contexts(expr.span, span) {
                             return;
                         }
                         // move block higher
-                        span_help_and_lint(
+                        let mut applicability = Applicability::MachineApplicable;
+                        span_lint_and_sugg(
                             cx,
                             BLOCK_IN_IF_CONDITION_STMT,
-                            check.span,
+                            expr.span.with_hi(cond.span.hi()),
                             COMPLEX_BLOCK_MESSAGE,
-                            &format!(
-                                "try\nlet res = {};\nif res {} ... ",
-                                snippet_block(cx, block.span, ".."),
-                                snippet_block(cx, then.span, "..")
+                            "try",
+                            format!(
+                                "let res = {}; if res",
+                                snippet_block_with_applicability(
+                                    cx,
+                                    block.span,
+                                    "..",
+                                    Some(expr.span),
+                                    &mut applicability
+                                ),
                             ),
+                            applicability,
                         );
                     }
                 }
             } else {
-                let mut visitor = ExVisitor {
-                    found_block: None,
-                    cx,
-                };
-                walk_expr(&mut visitor, check);
+                let mut visitor = ExVisitor { found_block: None, cx };
+                walk_expr(&mut visitor, cond);
                 if let Some(block) = visitor.found_block {
                     span_lint(cx, BLOCK_IN_IF_CONDITION_STMT, block.span, COMPLEX_BLOCK_MESSAGE);
                 }

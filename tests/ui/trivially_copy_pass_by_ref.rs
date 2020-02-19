@@ -1,16 +1,11 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// normalize-stderr-test "\(\d+ byte\)" -> "(N byte)"
+// normalize-stderr-test "\(limit: \d+ byte\)" -> "(limit: N byte)"
 
-
-
-
-#![allow(clippy::many_single_char_names, clippy::blacklisted_name, clippy::redundant_field_names)]
+#![allow(
+    clippy::many_single_char_names,
+    clippy::blacklisted_name,
+    clippy::redundant_field_names
+)]
 
 #[derive(Copy, Clone)]
 struct Foo(u32);
@@ -18,14 +13,21 @@ struct Foo(u32);
 #[derive(Copy, Clone)]
 struct Bar([u8; 24]);
 
+#[derive(Copy, Clone)]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
 struct FooRef<'a> {
     foo: &'a Foo,
 }
 
 type Baz = u32;
 
-fn good(a: &mut u32, b: u32, c: &Bar) {
-}
+fn good(a: &mut u32, b: u32, c: &Bar) {}
 
 fn good_return_implicit_lt_ref(foo: &Foo) -> &u32 {
     &foo.0
@@ -37,33 +39,24 @@ fn good_return_explicit_lt_ref<'a>(foo: &'a Foo) -> &'a u32 {
 }
 
 fn good_return_implicit_lt_struct(foo: &Foo) -> FooRef {
-    FooRef {
-        foo,
-    }
+    FooRef { foo }
 }
 
 #[allow(clippy::needless_lifetimes)]
 fn good_return_explicit_lt_struct<'a>(foo: &'a Foo) -> FooRef<'a> {
-    FooRef {
-        foo,
-    }
+    FooRef { foo }
 }
 
-fn bad(x: &u32, y: &Foo, z: &Baz) {
-}
+fn bad(x: &u32, y: &Foo, z: &Baz) {}
 
 impl Foo {
-    fn good(self, a: &mut u32, b: u32, c: &Bar) {
-    }
+    fn good(self, a: &mut u32, b: u32, c: &Bar) {}
 
-    fn good2(&mut self) {
-    }
+    fn good2(&mut self) {}
 
-    fn bad(&self, x: &u32, y: &Foo, z: &Baz) {
-    }
+    fn bad(&self, x: &u32, y: &Foo, z: &Baz) {}
 
-    fn bad2(x: &u32, y: &Foo, z: &Baz) {
-    }
+    fn bad2(x: &u32, y: &Foo, z: &Baz) {}
 }
 
 impl AsRef<u32> for Foo {
@@ -73,11 +66,34 @@ impl AsRef<u32> for Foo {
 }
 
 impl Bar {
-    fn good(&self, a: &mut u32, b: u32, c: &Bar) {
+    fn good(&self, a: &mut u32, b: u32, c: &Bar) {}
+
+    fn bad2(x: &u32, y: &Foo, z: &Baz) {}
+}
+
+trait MyTrait {
+    fn trait_method(&self, _foo: &Foo);
+}
+
+pub trait MyTrait2 {
+    fn trait_method2(&self, _color: &Color);
+}
+
+impl MyTrait for Foo {
+    fn trait_method(&self, _foo: &Foo) {
+        unimplemented!()
+    }
+}
+
+#[allow(unused_variables)]
+mod issue3992 {
+    pub trait A {
+        #[allow(clippy::trivially_copy_pass_by_ref)]
+        fn a(b: &u16) {}
     }
 
-    fn bad2(x: &u32, y: &Foo, z: &Baz) {
-    }
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn c(d: &u16) {}
 }
 
 fn main() {

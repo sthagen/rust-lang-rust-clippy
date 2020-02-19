@@ -1,89 +1,94 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::hir;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::syntax::source_map::Span;
 use crate::utils::paths;
 use crate::utils::{
-    in_macro, match_trait_method, match_type,
-    remove_blocks, snippet,
-    span_lint_and_sugg,
+    is_copy, match_trait_method, match_type, remove_blocks, snippet_with_applicability, span_lint_and_sugg,
 };
 use if_chain::if_chain;
-use crate::syntax::ast::Ident;
+use rustc::ty;
+use rustc_errors::Applicability;
+use rustc_hir as hir;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
+use syntax::ast::Ident;
 
-#[derive(Clone)]
-pub struct Pass;
-
-/// **What it does:** Checks for usage of `iterator.map(|x| x.clone())` and suggests
-/// `iterator.cloned()` instead
-///
-/// **Why is this bad?** Readability, this can be written more concisely
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-///
-/// ```rust
-/// let x = vec![42, 43];
-/// let y = x.iter();
-/// let z = y.map(|i| *i);
-/// ```
-///
-/// The correct use would be:
-///
-/// ```rust
-/// let x = vec![42, 43];
-/// let y = x.iter();
-/// let z = y.cloned();
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `iterator.map(|x| x.clone())` and suggests
+    /// `iterator.cloned()` instead
+    ///
+    /// **Why is this bad?** Readability, this can be written more concisely
+    ///
+    /// **Known problems:** None
+    ///
+    /// **Example:**
+    ///
+    /// ```rust
+    /// let x = vec![42, 43];
+    /// let y = x.iter();
+    /// let z = y.map(|i| *i);
+    /// ```
+    ///
+    /// The correct use would be:
+    ///
+    /// ```rust
+    /// let x = vec![42, 43];
+    /// let y = x.iter();
+    /// let z = y.cloned();
+    /// ```
     pub MAP_CLONE,
     style,
     "using `iterator.map(|x| x.clone())`, or dereferencing closures for `Copy` types"
 }
 
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(MAP_CLONE)
-    }
-}
+declare_lint_pass!(MapClone => [MAP_CLONE]);
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_expr(&mut self, cx: &LateContext<'_, '_>, e: &hir::Expr) {
-        if in_macro(e.span) {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for MapClone {
+    fn check_expr(&mut self, cx: &LateContext<'_, '_>, e: &hir::Expr<'_>) {
+        if e.span.from_expansion() {
             return;
         }
 
         if_chain! {
-            if let hir::ExprKind::MethodCall(ref method, _, ref args) = e.node;
+            if let hir::ExprKind::MethodCall(ref method, _, ref args) = e.kind;
             if args.len() == 2;
             if method.ident.as_str() == "map";
             let ty = cx.tables.expr_ty(&args[0]);
             if match_type(cx, ty, &paths::OPTION) || match_trait_method(cx, e, &paths::ITERATOR);
-            if let hir::ExprKind::Closure(_, _, body_id, _, _) = args[1].node;
-            let closure_body = cx.tcx.hir.body(body_id);
+            if let hir::ExprKind::Closure(_, _, body_id, _, _) = args[1].kind;
+            let closure_body = cx.tcx.hir().body(body_id);
             let closure_expr = remove_blocks(&closure_body.value);
             then {
-                match closure_body.arguments[0].pat.node {
-                    hir::PatKind::Ref(ref inner, _) => if let hir::PatKind::Binding(hir::BindingAnnotation::Unannotated, _, name, None) = inner.node {
-                        lint(cx, e.span, args[0].span, name, closure_expr);
-                    },
-                    hir::PatKind::Binding(hir::BindingAnnotation::Unannotated, _, name, None) => match closure_expr.node {
-                        hir::ExprKind::Unary(hir::UnOp::UnDeref, ref inner) if !cx.tables.expr_ty(inner).is_box() => lint(cx, e.span, args[0].span, name, inner),
-                        hir::ExprKind::MethodCall(ref method, _, ref obj) => if method.ident.as_str() == "clone" && match_trait_method(cx, closure_expr, &paths::CLONE_TRAIT) {
-                            lint(cx, e.span, args[0].span, name, &obj[0]);
+                match closure_body.params[0].pat.kind {
+                    hir::PatKind::Ref(ref inner, _) => if let hir::PatKind::Binding(
+                        hir::BindingAnnotation::Unannotated, .., name, None
+                    ) = inner.kind {
+                        if ident_eq(name, closure_expr) {
+                            lint(cx, e.span, args[0].span, true);
                         }
-                        _ => {},
+                    },
+                    hir::PatKind::Binding(hir::BindingAnnotation::Unannotated, .., name, None) => {
+                        match closure_expr.kind {
+                            hir::ExprKind::Unary(hir::UnOp::UnDeref, ref inner) => {
+                                if ident_eq(name, inner) {
+                                    if let ty::Ref(..) = cx.tables.expr_ty(inner).kind {
+                                        lint(cx, e.span, args[0].span, true);
+                                    }
+                                }
+                            },
+                            hir::ExprKind::MethodCall(ref method, _, ref obj) => {
+                                if ident_eq(name, &obj[0]) && method.ident.as_str() == "clone"
+                                    && match_trait_method(cx, closure_expr, &paths::CLONE_TRAIT) {
+
+                                    let obj_ty = cx.tables.expr_ty(&obj[0]);
+                                    if let ty::Ref(_, ty, _) = obj_ty.kind {
+                                        let copy = is_copy(cx, ty);
+                                        lint(cx, e.span, args[0].span, copy);
+                                    } else {
+                                        lint_needless_cloning(cx, e.span, args[0].span);
+                                    }
+                                }
+                            },
+                            _ => {},
+                        }
                     },
                     _ => {},
                 }
@@ -92,17 +97,53 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
     }
 }
 
-fn lint(cx: &LateContext<'_, '_>, replace: Span, root: Span, name: Ident, path: &hir::Expr) {
-    if let hir::ExprKind::Path(hir::QPath::Resolved(None, ref path)) = path.node {
-        if path.segments.len() == 1 && path.segments[0].ident == name {
-            span_lint_and_sugg(
-                cx,
-                MAP_CLONE,
-                replace,
-                "You are using an explicit closure for cloning elements",
-                "Consider calling the dedicated `cloned` method",
-                format!("{}.cloned()", snippet(cx, root, "..")),
-            )
-        }
+fn ident_eq(name: Ident, path: &hir::Expr<'_>) -> bool {
+    if let hir::ExprKind::Path(hir::QPath::Resolved(None, ref path)) = path.kind {
+        path.segments.len() == 1 && path.segments[0].ident == name
+    } else {
+        false
+    }
+}
+
+fn lint_needless_cloning(cx: &LateContext<'_, '_>, root: Span, receiver: Span) {
+    span_lint_and_sugg(
+        cx,
+        MAP_CLONE,
+        root.trim_start(receiver).unwrap(),
+        "You are needlessly cloning iterator elements",
+        "Remove the `map` call",
+        String::new(),
+        Applicability::MachineApplicable,
+    )
+}
+
+fn lint(cx: &LateContext<'_, '_>, replace: Span, root: Span, copied: bool) {
+    let mut applicability = Applicability::MachineApplicable;
+    if copied {
+        span_lint_and_sugg(
+            cx,
+            MAP_CLONE,
+            replace,
+            "You are using an explicit closure for copying elements",
+            "Consider calling the dedicated `copied` method",
+            format!(
+                "{}.copied()",
+                snippet_with_applicability(cx, root, "..", &mut applicability)
+            ),
+            applicability,
+        )
+    } else {
+        span_lint_and_sugg(
+            cx,
+            MAP_CLONE,
+            replace,
+            "You are using an explicit closure for cloning elements",
+            "Consider calling the dedicated `cloned` method",
+            format!(
+                "{}.cloned()",
+                snippet_with_applicability(cx, root, "..", &mut applicability)
+            ),
+            applicability,
+        )
     }
 }

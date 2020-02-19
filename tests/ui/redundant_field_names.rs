@@ -1,23 +1,11 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
+// run-rustfix
 #![warn(clippy::redundant_field_names)]
-#![allow(unused_variables)]
-#![feature(inclusive_range, inclusive_range_fields, inclusive_range_methods)]
+#![allow(clippy::no_effect, dead_code, unused_variables)]
 
 #[macro_use]
 extern crate derive_new;
 
-use std::ops::{Range, RangeFrom, RangeTo, RangeInclusive, RangeToInclusive};
+use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
 mod foo {
     pub const BAR: u8 = 0;
@@ -46,8 +34,8 @@ fn main() {
         gender: gender,
         age: age,
 
-        name, //should be ok
-        buzz: fizz, //should be ok
+        name,          //should be ok
+        buzz: fizz,    //should be ok
         foo: foo::BAR, //should be ok
     };
 
@@ -70,4 +58,14 @@ fn main() {
     let _ = Range { start: start, end: end };
     let _ = RangeInclusive::new(start, end);
     let _ = RangeToInclusive { end: end };
+}
+
+fn issue_3476() {
+    fn foo<T>() {}
+
+    struct S {
+        foo: fn(),
+    }
+
+    S { foo: foo::<i32> };
 }

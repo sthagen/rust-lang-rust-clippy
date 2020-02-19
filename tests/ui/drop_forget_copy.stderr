@@ -1,75 +1,75 @@
-error: calls to `std::mem::drop` with a value that implements Copy. Dropping a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:43:5
+error: calls to `std::mem::drop` with a value that implements `Copy`. Dropping a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:33:5
    |
-43 |     drop(s1);
+LL |     drop(s1);
    |     ^^^^^^^^
    |
    = note: `-D clippy::drop-copy` implied by `-D warnings`
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:43:10
+  --> $DIR/drop_forget_copy.rs:33:10
    |
-43 |     drop(s1);
+LL |     drop(s1);
    |          ^^
 
-error: calls to `std::mem::drop` with a value that implements Copy. Dropping a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:44:5
+error: calls to `std::mem::drop` with a value that implements `Copy`. Dropping a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:34:5
    |
-44 |     drop(s2);
+LL |     drop(s2);
    |     ^^^^^^^^
    |
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:44:10
+  --> $DIR/drop_forget_copy.rs:34:10
    |
-44 |     drop(s2);
+LL |     drop(s2);
    |          ^^
 
-error: calls to `std::mem::drop` with a value that implements Copy. Dropping a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:46:5
+error: calls to `std::mem::drop` with a value that implements `Copy`. Dropping a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:36:5
    |
-46 |     drop(s4);
+LL |     drop(s4);
    |     ^^^^^^^^
    |
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:46:10
+  --> $DIR/drop_forget_copy.rs:36:10
    |
-46 |     drop(s4);
+LL |     drop(s4);
    |          ^^
 
-error: calls to `std::mem::forget` with a value that implements Copy. Forgetting a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:49:5
+error: calls to `std::mem::forget` with a value that implements `Copy`. Forgetting a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:39:5
    |
-49 |     forget(s1);
+LL |     forget(s1);
    |     ^^^^^^^^^^
    |
    = note: `-D clippy::forget-copy` implied by `-D warnings`
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:49:12
+  --> $DIR/drop_forget_copy.rs:39:12
    |
-49 |     forget(s1);
+LL |     forget(s1);
    |            ^^
 
-error: calls to `std::mem::forget` with a value that implements Copy. Forgetting a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:50:5
+error: calls to `std::mem::forget` with a value that implements `Copy`. Forgetting a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:40:5
    |
-50 |     forget(s2);
+LL |     forget(s2);
    |     ^^^^^^^^^^
    |
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:50:12
+  --> $DIR/drop_forget_copy.rs:40:12
    |
-50 |     forget(s2);
+LL |     forget(s2);
    |            ^^
 
-error: calls to `std::mem::forget` with a value that implements Copy. Forgetting a copy leaves the original intact.
-  --> $DIR/drop_forget_copy.rs:52:5
+error: calls to `std::mem::forget` with a value that implements `Copy`. Forgetting a copy leaves the original intact.
+  --> $DIR/drop_forget_copy.rs:42:5
    |
-52 |     forget(s4);
+LL |     forget(s4);
    |     ^^^^^^^^^^
    |
 note: argument has type SomeStruct
-  --> $DIR/drop_forget_copy.rs:52:12
+  --> $DIR/drop_forget_copy.rs:42:12
    |
-52 |     forget(s4);
+LL |     forget(s4);
    |            ^^
 
 error: aborting due to 6 previous errors

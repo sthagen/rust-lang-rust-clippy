@@ -1,55 +1,38 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 //! checks for `#[inline]` on trait methods without bodies
 
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc::hir::*;
-use crate::syntax::ast::{Attribute, Name};
 use crate::utils::span_lint_and_then;
 use crate::utils::sugg::DiagnosticBuilderExt;
-use crate::rustc_errors::Applicability;
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use syntax::ast::{Attribute, Name};
 
-/// **What it does:** Checks for `#[inline]` on trait methods without bodies
-///
-/// **Why is this bad?** Only implementations of trait methods may be inlined.
-/// The inline attribute is ignored for trait methods without bodies.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// trait Animal {
-///     #[inline]
-///     fn name(&self) -> &'static str;
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for `#[inline]` on trait methods without bodies
+    ///
+    /// **Why is this bad?** Only implementations of trait methods may be inlined.
+    /// The inline attribute is ignored for trait methods without bodies.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// trait Animal {
+    ///     #[inline]
+    ///     fn name(&self) -> &'static str;
+    /// }
+    /// ```
     pub INLINE_FN_WITHOUT_BODY,
     correctness,
     "use of `#[inline]` on trait methods without bodies"
 }
 
-#[derive(Copy, Clone)]
-pub struct Pass;
+declare_lint_pass!(InlineFnWithoutBody => [INLINE_FN_WITHOUT_BODY]);
 
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(INLINE_FN_WITHOUT_BODY)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_trait_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx TraitItem) {
-        if let TraitItemKind::Method(_, TraitMethod::Required(_)) = item.node {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for InlineFnWithoutBody {
+    fn check_trait_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx TraitItem<'_>) {
+        if let TraitItemKind::Method(_, TraitMethod::Required(_)) = item.kind {
             check_attrs(cx, item.ident.name, &item.attrs);
         }
     }
@@ -57,7 +40,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
 
 fn check_attrs(cx: &LateContext<'_, '_>, name: Name, attrs: &[Attribute]) {
     for attr in attrs {
-        if attr.name() != "inline" {
+        if !attr.check_name(sym!(inline)) {
             continue;
         }
 

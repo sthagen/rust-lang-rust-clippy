@@ -1,16 +1,3 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #[warn(clippy::approx_constant)]
 #[allow(unused, clippy::shadow_unrelated, clippy::similar_names, clippy::unreadable_literal)]
 fn main() {
@@ -57,6 +44,12 @@ fn main() {
 
     let my_log2_e = 1.4426950408889634;
     let no_log2_e = 1.442;
+
+    let log2_10 = 3.321928094887362;
+    let no_log2_10 = 3.321;
+
+    let log10_2 = 0.301029995663981;
+    let no_log10_2 = 0.301;
 
     let my_pi = 3.1415;
     let almost_pi = 3.14;

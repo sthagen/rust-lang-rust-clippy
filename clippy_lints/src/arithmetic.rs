@@ -1,49 +1,42 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
+use crate::consts::constant_simple;
 use crate::utils::span_lint;
-use crate::rustc::hir;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::syntax::source_map::Span;
+use rustc_hir as hir;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_tool_lint, impl_lint_pass};
+use rustc_span::source_map::Span;
 
-/// **What it does:** Checks for plain integer arithmetic.
-///
-/// **Why is this bad?** This is only checked against overflow in debug builds.
-/// In some applications one wants explicitly checked, wrapping or saturating
-/// arithmetic.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// a + 1
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for plain integer arithmetic.
+    ///
+    /// **Why is this bad?** This is only checked against overflow in debug builds.
+    /// In some applications one wants explicitly checked, wrapping or saturating
+    /// arithmetic.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let a = 0;
+    /// a + 1;
+    /// ```
     pub INTEGER_ARITHMETIC,
     restriction,
     "any integer arithmetic statement"
 }
 
-/// **What it does:** Checks for float arithmetic.
-///
-/// **Why is this bad?** For some embedded systems or kernel development, it
-/// can be useful to rule out floating-point numbers.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// a + 1.0
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for float arithmetic.
+    ///
+    /// **Why is this bad?** For some embedded systems or kernel development, it
+    /// can be useful to rule out floating-point numbers.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let a = 0.0;
+    /// a + 1.0;
+    /// ```
     pub FLOAT_ARITHMETIC,
     restriction,
     "any floating-point arithmetic statement"
@@ -52,18 +45,15 @@ declare_clippy_lint! {
 #[derive(Copy, Clone, Default)]
 pub struct Arithmetic {
     expr_span: Option<Span>,
-    /// This field is used to check whether expressions are constants, such as in enum discriminants and consts
+    /// This field is used to check whether expressions are constants, such as in enum discriminants
+    /// and consts
     const_span: Option<Span>,
 }
 
-impl LintPass for Arithmetic {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(INTEGER_ARITHMETIC, FLOAT_ARITHMETIC)
-    }
-}
+impl_lint_pass!(Arithmetic => [INTEGER_ARITHMETIC, FLOAT_ARITHMETIC]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Arithmetic {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr) {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr<'_>) {
         if self.expr_span.is_some() {
             return;
         }
@@ -73,8 +63,8 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Arithmetic {
                 return;
             }
         }
-        match expr.node {
-            hir::ExprKind::Binary(ref op, ref l, ref r) => {
+        match &expr.kind {
+            hir::ExprKind::Binary(op, l, r) | hir::ExprKind::AssignOp(op, l, r) => {
                 match op.node {
                     hir::BinOpKind::And
                     | hir::BinOpKind::Or
@@ -100,33 +90,34 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Arithmetic {
                     self.expr_span = Some(expr.span);
                 }
             },
-            hir::ExprKind::Unary(hir::UnOp::UnNeg, ref arg) => {
+            hir::ExprKind::Unary(hir::UnOp::UnNeg, arg) => {
                 let ty = cx.tables.expr_ty(arg);
-                if ty.is_integral() {
-                    span_lint(cx, INTEGER_ARITHMETIC, expr.span, "integer arithmetic detected");
-                    self.expr_span = Some(expr.span);
-                } else if ty.is_floating_point() {
-                    span_lint(cx, FLOAT_ARITHMETIC, expr.span, "floating-point arithmetic detected");
-                    self.expr_span = Some(expr.span);
+                if constant_simple(cx, cx.tables, expr).is_none() {
+                    if ty.is_integral() {
+                        span_lint(cx, INTEGER_ARITHMETIC, expr.span, "integer arithmetic detected");
+                        self.expr_span = Some(expr.span);
+                    } else if ty.is_floating_point() {
+                        span_lint(cx, FLOAT_ARITHMETIC, expr.span, "floating-point arithmetic detected");
+                        self.expr_span = Some(expr.span);
+                    }
                 }
             },
             _ => (),
         }
     }
 
-    fn check_expr_post(&mut self, _: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr) {
+    fn check_expr_post(&mut self, _: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr<'_>) {
         if Some(expr.span) == self.expr_span {
             self.expr_span = None;
         }
     }
 
-    fn check_body(&mut self, cx: &LateContext<'_, '_>, body: &hir::Body) {
-        let body_owner = cx.tcx.hir.body_owner(body.id());
+    fn check_body(&mut self, cx: &LateContext<'_, '_>, body: &hir::Body<'_>) {
+        let body_owner = cx.tcx.hir().body_owner(body.id());
 
-        match cx.tcx.hir.body_owner_kind(body_owner) {
-            hir::BodyOwnerKind::Static(_)
-            | hir::BodyOwnerKind::Const => {
-                let body_span = cx.tcx.hir.span(body_owner);
+        match cx.tcx.hir().body_owner_kind(body_owner) {
+            hir::BodyOwnerKind::Static(_) | hir::BodyOwnerKind::Const => {
+                let body_span = cx.tcx.hir().span(body_owner);
 
                 if let Some(span) = self.const_span {
                     if span.contains(body_span) {
@@ -134,14 +125,14 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Arithmetic {
                     }
                 }
                 self.const_span = Some(body_span);
-            }
-            hir::BodyOwnerKind::Fn => (),
+            },
+            hir::BodyOwnerKind::Fn | hir::BodyOwnerKind::Closure => (),
         }
     }
 
-    fn check_body_post(&mut self, cx: &LateContext<'_, '_>, body: &hir::Body) {
-        let body_owner = cx.tcx.hir.body_owner(body.id());
-        let body_span = cx.tcx.hir.span(body_owner);
+    fn check_body_post(&mut self, cx: &LateContext<'_, '_>, body: &hir::Body<'_>) {
+        let body_owner = cx.tcx.hir().body_owner(body.id());
+        let body_span = cx.tcx.hir().span(body_owner);
 
         if let Some(span) = self.const_span {
             if span.contains(body_span) {

@@ -1,14 +1,6 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// run-rustfix
 
-
-
+#![allow(unused_must_use)]
 
 use std::collections::HashSet;
 
@@ -25,7 +17,7 @@ fn main() {
     // should have done this but produced an ICE
     //
     // We may not want to suggest changing these anyway
-    // See: https://github.com/rust-lang-nursery/rust-clippy/issues/650#issuecomment-184328984
+    // See: https://github.com/rust-lang/rust-clippy/issues/650#issuecomment-184328984
     x.split("ß");
     x.split("ℝ");
     x.split("💣");
@@ -45,10 +37,12 @@ fn main() {
     x.rmatches("x");
     x.match_indices("x");
     x.rmatch_indices("x");
-    x.trim_left_matches("x");
-    x.trim_right_matches("x");
+    x.trim_start_matches("x");
+    x.trim_end_matches("x");
     // Make sure we escape characters correctly.
     x.split("\n");
+    x.split("'");
+    x.split("\'");
 
     let h = HashSet::<String>::new();
     h.contains("X"); // should not warn
@@ -59,4 +53,11 @@ fn main() {
     // Issue #3204
     const S: &str = "#";
     x.find(S);
+
+    // Raw string
+    x.split(r"a");
+    x.split(r#"a"#);
+    x.split(r###"a"###);
+    x.split(r###"'"###);
+    x.split(r###"#"###);
 }

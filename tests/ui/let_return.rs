@@ -1,17 +1,4 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![allow(unused)]
-
 #![warn(clippy::let_and_return)]
 
 fn test() -> i32 {
@@ -52,5 +39,32 @@ fn test_nowarn_4() -> i32 {
     x
 }
 
-fn main() {
+fn test_nowarn_5(x: i16) -> u16 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let x = x as u16;
+    x
 }
+
+// False positive example
+trait Decode {
+    fn decode<D: std::io::Read>(d: D) -> Result<Self, ()>
+    where
+        Self: Sized;
+}
+
+macro_rules! tuple_encode {
+    ($($x:ident),*) => (
+        impl<$($x: Decode),*> Decode for ($($x),*) {
+            #[inline]
+            #[allow(non_snake_case)]
+            fn decode<D: std::io::Read>(mut d: D) -> Result<Self, ()> {
+                // Shouldn't trigger lint
+                Ok(($({let $x = Decode::decode(&mut d)?; $x }),*))
+            }
+        }
+    );
+}
+
+tuple_encode!(T0, T1, T2, T3, T4, T5, T6, T7);
+
+fn main() {}

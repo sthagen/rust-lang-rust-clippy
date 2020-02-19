@@ -1,16 +1,3 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #![warn(clippy::wrong_self_convention)]
 #![warn(clippy::wrong_pub_self_convention)]
 #![allow(dead_code, clippy::trivially_copy_pass_by_ref)]
@@ -21,7 +8,6 @@ fn main() {}
 struct Foo;
 
 impl Foo {
-
     fn as_i32(self) {}
     fn as_u32(&self) {}
     fn into_i32(self) {}
@@ -39,14 +25,13 @@ impl Foo {
     #[allow(clippy::wrong_self_convention)]
     pub fn from_cake(self) {}
 
-    fn as_x<F: AsRef<Self>>(_: F) { }
-    fn as_y<F: AsRef<Foo>>(_: F) { }
+    fn as_x<F: AsRef<Self>>(_: F) {}
+    fn as_y<F: AsRef<Foo>>(_: F) {}
 }
 
 struct Bar;
 
 impl Bar {
-
     fn as_i32(self) {}
     fn as_u32(&self) {}
     fn into_i32(&self) {}
@@ -70,4 +55,23 @@ impl Bar {
     fn to_(self) {}
     fn from_(self) {}
     fn to_mut(&mut self) {}
+}
+
+// Allow Box<Self>, Rc<Self>, Arc<Self> for methods that take conventionally take Self by value
+#[allow(clippy::boxed_local)]
+mod issue4293 {
+    use std::rc::Rc;
+    use std::sync::Arc;
+
+    struct T;
+
+    impl T {
+        fn into_s1(self: Box<Self>) {}
+        fn into_s2(self: Rc<Self>) {}
+        fn into_s3(self: Arc<Self>) {}
+
+        fn into_t1(self: Box<T>) {}
+        fn into_t2(self: Rc<T>) {}
+        fn into_t3(self: Arc<T>) {}
+    }
 }

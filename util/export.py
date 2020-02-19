@@ -1,18 +1,8 @@
 #!/usr/bin/env python
 
-# Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-# file at the top-level directory of this distribution and at
-# http://rust-lang.org/COPYRIGHT.
-#
-# Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-# http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-# <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-# option. This file may not be copied, modified, or distributed
-# except according to those terms.
-
-
 # Build the gh-pages
 
+from collections import OrderedDict
 import re
 import sys
 import json
@@ -20,6 +10,7 @@ import json
 from lintlib import parse_all, log
 
 lint_subheadline = re.compile(r'''^\*\*([\w\s]+?)[:?.!]?\*\*(.*)''')
+rust_code_block = re.compile(r'''```rust.+?```''', flags=re.DOTALL)
 
 CONF_TEMPLATE = """\
 This lint has the following configuration variables:
@@ -27,38 +18,44 @@ This lint has the following configuration variables:
 * `%s: %s`: %s (defaults to `%s`)."""
 
 
+def parse_code_block(match):
+    lines = []
+
+    for line in match.group(0).split('\n'):
+        if not line.startswith('# '):
+            lines.append(line)
+
+    return '\n'.join(lines)
+
+
 def parse_lint_def(lint):
     lint_dict = {}
     lint_dict['id'] = lint.name
     lint_dict['group'] = lint.group
     lint_dict['level'] = lint.level
-    lint_dict['docs'] = {}
+    lint_dict['docs'] = OrderedDict()
 
     last_section = None
 
     for line in lint.doc:
-        if len(line.strip()) == 0 and not last_section.startswith("Example"):
-            continue
-
         match = re.match(lint_subheadline, line)
         if match:
             last_section = match.groups()[0]
-        if match:
             text = match.groups()[1]
         else:
             text = line
 
         if not last_section:
-            log.warn("Skipping comment line as it was not preceded by a heading")
+            log.warning("Skipping comment line as it was not preceded by a heading")
             log.debug("in lint `%s`, line `%s`", lint.name, line)
 
-        fragment = lint_dict['docs'].get(last_section, "")
-        if text == "\n":
-            line = fragment + text
-        else:
-            line = (fragment + "\n" + text).strip()
+        if last_section not in lint_dict['docs']:
+            lint_dict['docs'][last_section] = ""
 
-        lint_dict['docs'][last_section] = line
+        lint_dict['docs'][last_section] += text + "\n"
+
+    for section in lint_dict['docs']:
+        lint_dict['docs'][section] = re.sub(rust_code_block, parse_code_block, lint_dict['docs'][section].strip())
 
     return lint_dict
 
@@ -74,7 +71,9 @@ def main():
 
     outfile = sys.argv[1] if len(sys.argv) > 1 else "util/gh-pages/lints.json"
     with open(outfile, "w") as fp:
-        json.dump(list(lints.values()), fp, indent=2)
+        lints = list(lints.values())
+        lints.sort(key=lambda x: x['id'])
+        json.dump(lints, fp, indent=2)
         log.info("wrote JSON for great justice")
 
 

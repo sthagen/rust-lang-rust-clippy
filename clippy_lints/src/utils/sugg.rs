@@ -1,32 +1,21 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 //! Contains utility functions to generate suggestions.
 #![deny(clippy::missing_docs_in_private_items)]
 
+use crate::utils::{higher, snippet, snippet_opt, snippet_with_macro_callsite};
 use matches::matches;
-use crate::rustc::hir;
-use crate::rustc::lint::{EarlyContext, LateContext, LintContext};
-use crate::rustc_errors;
+use rustc_ast_pretty::pprust::token_kind_to_string;
+use rustc_errors::Applicability;
+use rustc_hir as hir;
+use rustc_lint::{EarlyContext, LateContext, LintContext};
+use rustc_span::source_map::{CharPos, Span};
+use rustc_span::{BytePos, Pos};
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt::Display;
-use std;
-use crate::syntax::source_map::{CharPos, Span};
-use crate::syntax::parse::token;
-use crate::syntax::print::pprust::token_to_string;
-use crate::syntax::util::parser::AssocOp;
-use crate::syntax::ast;
-use crate::utils::{higher, snippet, snippet_opt};
-use crate::syntax_pos::{BytePos, Pos};
-use crate::rustc_errors::Applicability;
+use syntax::util::parser::AssocOp;
+use syntax::{ast, token};
+
+pub use crate::literal_representation::format_numeric_literal;
 
 /// A helper type to build suggestion correctly handling parenthesis.
 pub enum Sugg<'a> {
@@ -53,89 +42,134 @@ impl Display for Sugg<'_> {
 #[allow(clippy::wrong_self_convention)] // ok, because of the function `as_ty` method
 impl<'a> Sugg<'a> {
     /// Prepare a suggestion from an expression.
-    pub fn hir_opt(cx: &LateContext<'_, '_>, expr: &hir::Expr) -> Option<Self> {
+    pub fn hir_opt(cx: &LateContext<'_, '_>, expr: &hir::Expr<'_>) -> Option<Self> {
         snippet_opt(cx, expr.span).map(|snippet| {
             let snippet = Cow::Owned(snippet);
-            match expr.node {
-                hir::ExprKind::AddrOf(..) |
-                hir::ExprKind::Box(..) |
-                hir::ExprKind::Closure(.., _) |
-                hir::ExprKind::If(..) |
-                hir::ExprKind::Unary(..) |
-                hir::ExprKind::Match(..) => Sugg::MaybeParen(snippet),
-                hir::ExprKind::Continue(..) |
-                hir::ExprKind::Yield(..) |
-                hir::ExprKind::Array(..) |
-                hir::ExprKind::Block(..) |
-                hir::ExprKind::Break(..) |
-                hir::ExprKind::Call(..) |
-                hir::ExprKind::Field(..) |
-                hir::ExprKind::Index(..) |
-                hir::ExprKind::InlineAsm(..) |
-                hir::ExprKind::Lit(..) |
-                hir::ExprKind::Loop(..) |
-                hir::ExprKind::MethodCall(..) |
-                hir::ExprKind::Path(..) |
-                hir::ExprKind::Repeat(..) |
-                hir::ExprKind::Ret(..) |
-                hir::ExprKind::Struct(..) |
-                hir::ExprKind::Tup(..) |
-                hir::ExprKind::While(..) => Sugg::NonParen(snippet),
-                hir::ExprKind::Assign(..) => Sugg::BinOp(AssocOp::Assign, snippet),
-                hir::ExprKind::AssignOp(op, ..) => Sugg::BinOp(hirbinop2assignop(op), snippet),
-                hir::ExprKind::Binary(op, ..) => Sugg::BinOp(AssocOp::from_ast_binop(higher::binop(op.node)), snippet),
-                hir::ExprKind::Cast(..) => Sugg::BinOp(AssocOp::As, snippet),
-                hir::ExprKind::Type(..) => Sugg::BinOp(AssocOp::Colon, snippet),
-            }
+            Self::hir_from_snippet(cx, expr, snippet)
         })
     }
 
     /// Convenience function around `hir_opt` for suggestions with a default
     /// text.
-    pub fn hir(cx: &LateContext<'_, '_>, expr: &hir::Expr, default: &'a str) -> Self {
+    pub fn hir(cx: &LateContext<'_, '_>, expr: &hir::Expr<'_>, default: &'a str) -> Self {
         Self::hir_opt(cx, expr).unwrap_or_else(|| Sugg::NonParen(Cow::Borrowed(default)))
+    }
+
+    /// Same as `hir`, but it adapts the applicability level by following rules:
+    ///
+    /// - Applicability level `Unspecified` will never be changed.
+    /// - If the span is inside a macro, change the applicability level to `MaybeIncorrect`.
+    /// - If the default value is used and the applicability level is `MachineApplicable`, change it
+    ///   to
+    /// `HasPlaceholders`
+    pub fn hir_with_applicability(
+        cx: &LateContext<'_, '_>,
+        expr: &hir::Expr<'_>,
+        default: &'a str,
+        applicability: &mut Applicability,
+    ) -> Self {
+        if *applicability != Applicability::Unspecified && expr.span.from_expansion() {
+            *applicability = Applicability::MaybeIncorrect;
+        }
+        Self::hir_opt(cx, expr).unwrap_or_else(|| {
+            if *applicability == Applicability::MachineApplicable {
+                *applicability = Applicability::HasPlaceholders;
+            }
+            Sugg::NonParen(Cow::Borrowed(default))
+        })
+    }
+
+    /// Same as `hir`, but will use the pre expansion span if the `expr` was in a macro.
+    pub fn hir_with_macro_callsite(cx: &LateContext<'_, '_>, expr: &hir::Expr<'_>, default: &'a str) -> Self {
+        let snippet = snippet_with_macro_callsite(cx, expr.span, default);
+
+        Self::hir_from_snippet(cx, expr, snippet)
+    }
+
+    /// Generate a suggestion for an expression with the given snippet. This is used by the `hir_*`
+    /// function variants of `Sugg`, since these use different snippet functions.
+    fn hir_from_snippet(cx: &LateContext<'_, '_>, expr: &hir::Expr<'_>, snippet: Cow<'a, str>) -> Self {
+        if let Some(range) = higher::range(cx, expr) {
+            let op = match range.limits {
+                ast::RangeLimits::HalfOpen => AssocOp::DotDot,
+                ast::RangeLimits::Closed => AssocOp::DotDotEq,
+            };
+            return Sugg::BinOp(op, snippet);
+        }
+
+        match expr.kind {
+            hir::ExprKind::AddrOf(..)
+            | hir::ExprKind::Box(..)
+            | hir::ExprKind::Closure(..)
+            | hir::ExprKind::Unary(..)
+            | hir::ExprKind::Match(..) => Sugg::MaybeParen(snippet),
+            hir::ExprKind::Continue(..)
+            | hir::ExprKind::Yield(..)
+            | hir::ExprKind::Array(..)
+            | hir::ExprKind::Block(..)
+            | hir::ExprKind::Break(..)
+            | hir::ExprKind::Call(..)
+            | hir::ExprKind::Field(..)
+            | hir::ExprKind::Index(..)
+            | hir::ExprKind::InlineAsm(..)
+            | hir::ExprKind::Lit(..)
+            | hir::ExprKind::Loop(..)
+            | hir::ExprKind::MethodCall(..)
+            | hir::ExprKind::Path(..)
+            | hir::ExprKind::Repeat(..)
+            | hir::ExprKind::Ret(..)
+            | hir::ExprKind::Struct(..)
+            | hir::ExprKind::Tup(..)
+            | hir::ExprKind::DropTemps(_)
+            | hir::ExprKind::Err => Sugg::NonParen(snippet),
+            hir::ExprKind::Assign(..) => Sugg::BinOp(AssocOp::Assign, snippet),
+            hir::ExprKind::AssignOp(op, ..) => Sugg::BinOp(hirbinop2assignop(op), snippet),
+            hir::ExprKind::Binary(op, ..) => Sugg::BinOp(AssocOp::from_ast_binop(higher::binop(op.node)), snippet),
+            hir::ExprKind::Cast(..) => Sugg::BinOp(AssocOp::As, snippet),
+            hir::ExprKind::Type(..) => Sugg::BinOp(AssocOp::Colon, snippet),
+        }
     }
 
     /// Prepare a suggestion from an expression.
     pub fn ast(cx: &EarlyContext<'_>, expr: &ast::Expr, default: &'a str) -> Self {
-        use crate::syntax::ast::RangeLimits;
+        use syntax::ast::RangeLimits;
 
         let snippet = snippet(cx, expr.span, default);
 
-        match expr.node {
-            ast::ExprKind::AddrOf(..) |
-            ast::ExprKind::Box(..) |
-            ast::ExprKind::Closure(..) |
-            ast::ExprKind::If(..) |
-            ast::ExprKind::IfLet(..) |
-            ast::ExprKind::ObsoleteInPlace(..) |
-            ast::ExprKind::Unary(..) |
-            ast::ExprKind::Match(..) => Sugg::MaybeParen(snippet),
-            ast::ExprKind::Async(..) |
-            ast::ExprKind::Block(..) |
-            ast::ExprKind::Break(..) |
-            ast::ExprKind::Call(..) |
-            ast::ExprKind::Continue(..) |
-            ast::ExprKind::Yield(..) |
-            ast::ExprKind::Field(..) |
-            ast::ExprKind::ForLoop(..) |
-            ast::ExprKind::Index(..) |
-            ast::ExprKind::InlineAsm(..) |
-            ast::ExprKind::Lit(..) |
-            ast::ExprKind::Loop(..) |
-            ast::ExprKind::Mac(..) |
-            ast::ExprKind::MethodCall(..) |
-            ast::ExprKind::Paren(..) |
-            ast::ExprKind::Path(..) |
-            ast::ExprKind::Repeat(..) |
-            ast::ExprKind::Ret(..) |
-            ast::ExprKind::Struct(..) |
-            ast::ExprKind::Try(..) |
-            ast::ExprKind::TryBlock(..) |
-            ast::ExprKind::Tup(..) |
-            ast::ExprKind::Array(..) |
-            ast::ExprKind::While(..) |
-            ast::ExprKind::WhileLet(..) => Sugg::NonParen(snippet),
+        match expr.kind {
+            ast::ExprKind::AddrOf(..)
+            | ast::ExprKind::Box(..)
+            | ast::ExprKind::Closure(..)
+            | ast::ExprKind::If(..)
+            | ast::ExprKind::Let(..)
+            | ast::ExprKind::Unary(..)
+            | ast::ExprKind::Match(..) => Sugg::MaybeParen(snippet),
+            ast::ExprKind::Async(..)
+            | ast::ExprKind::Block(..)
+            | ast::ExprKind::Break(..)
+            | ast::ExprKind::Call(..)
+            | ast::ExprKind::Continue(..)
+            | ast::ExprKind::Yield(..)
+            | ast::ExprKind::Field(..)
+            | ast::ExprKind::ForLoop(..)
+            | ast::ExprKind::Index(..)
+            | ast::ExprKind::InlineAsm(..)
+            | ast::ExprKind::Lit(..)
+            | ast::ExprKind::Loop(..)
+            | ast::ExprKind::Mac(..)
+            | ast::ExprKind::MethodCall(..)
+            | ast::ExprKind::Paren(..)
+            | ast::ExprKind::Path(..)
+            | ast::ExprKind::Repeat(..)
+            | ast::ExprKind::Ret(..)
+            | ast::ExprKind::Struct(..)
+            | ast::ExprKind::Try(..)
+            | ast::ExprKind::TryBlock(..)
+            | ast::ExprKind::Tup(..)
+            | ast::ExprKind::Array(..)
+            | ast::ExprKind::While(..)
+            | ast::ExprKind::Await(..)
+            | ast::ExprKind::Err => Sugg::NonParen(snippet),
             ast::ExprKind::Range(.., RangeLimits::HalfOpen) => Sugg::BinOp(AssocOp::DotDot, snippet),
             ast::ExprKind::Range(.., RangeLimits::Closed) => Sugg::BinOp(AssocOp::DotDotEq, snippet),
             ast::ExprKind::Assign(..) => Sugg::BinOp(AssocOp::Assign, snippet),
@@ -149,6 +183,11 @@ impl<'a> Sugg<'a> {
     /// Convenience method to create the `<lhs> && <rhs>` suggestion.
     pub fn and(self, rhs: &Self) -> Sugg<'static> {
         make_binop(ast::BinOpKind::And, &self, rhs)
+    }
+
+    /// Convenience method to create the `<lhs> & <rhs>` suggestion.
+    pub fn bit_and(self, rhs: &Self) -> Sugg<'static> {
+        make_binop(ast::BinOpKind::BitAnd, &self, rhs)
     }
 
     /// Convenience method to create the `<lhs> as <rhs>` suggestion.
@@ -185,6 +224,17 @@ impl<'a> Sugg<'a> {
         make_unop("&mut *", self)
     }
 
+    /// Convenience method to transform suggestion into a return call
+    pub fn make_return(self) -> Sugg<'static> {
+        Sugg::NonParen(Cow::Owned(format!("return {}", self)))
+    }
+
+    /// Convenience method to transform suggestion into a block
+    /// where the suggestion is a trailing expression
+    pub fn blockify(self) -> Sugg<'static> {
+        Sugg::NonParen(Cow::Owned(format!("{{ {} }}", self)))
+    }
+
     /// Convenience method to create the `<lhs>..<rhs>` or `<lhs>...<rhs>`
     /// suggestion.
     #[allow(dead_code)]
@@ -195,17 +245,19 @@ impl<'a> Sugg<'a> {
         }
     }
 
-    /// Add parenthesis to any expression that might need them. Suitable to the
-    /// `self` argument of
-    /// a method call (eg. to build `bar.foo()` or `(1 + 2).foo()`).
+    /// Adds parenthesis to any expression that might need them. Suitable to the
+    /// `self` argument of a method call
+    /// (e.g., to build `bar.foo()` or `(1 + 2).foo()`).
     pub fn maybe_par(self) -> Self {
         match self {
             Sugg::NonParen(..) => self,
-            // (x) and (x).y() both don't need additional parens
-            Sugg::MaybeParen(sugg) => if sugg.starts_with('(') && sugg.ends_with(')') {
-                Sugg::MaybeParen(sugg)
-            } else {
-                Sugg::NonParen(format!("({})", sugg).into())
+            // `(x)` and `(x).y()` both don't need additional parens.
+            Sugg::MaybeParen(sugg) => {
+                if sugg.starts_with('(') && sugg.ends_with(')') {
+                    Sugg::MaybeParen(sugg)
+                } else {
+                    Sugg::NonParen(format!("({})", sugg).into())
+                }
             },
             Sugg::BinOp(_, sugg) => Sugg::NonParen(format!("({})", sugg).into()),
         }
@@ -235,19 +287,16 @@ impl<'a> std::ops::Not for Sugg<'a> {
 
 /// Helper type to display either `foo` or `(foo)`.
 struct ParenHelper<T> {
-    /// Whether parenthesis are needed.
+    /// `true` if parentheses are needed.
     paren: bool,
     /// The main thing to display.
     wrapped: T,
 }
 
 impl<T> ParenHelper<T> {
-    /// Build a `ParenHelper`.
+    /// Builds a `ParenHelper`.
     fn new(paren: bool, wrapped: T) -> Self {
-        Self {
-            paren,
-            wrapped,
-        }
+        Self { paren, wrapped }
     }
 }
 
@@ -261,7 +310,7 @@ impl<T: Display> Display for ParenHelper<T> {
     }
 }
 
-/// Build the string for `<op><expr>` adding parenthesis when necessary.
+/// Builds the string for `<op><expr>` adding parenthesis when necessary.
 ///
 /// For convenience, the operator is taken as a string because all unary
 /// operators have the same
@@ -270,18 +319,19 @@ pub fn make_unop(op: &str, expr: Sugg<'_>) -> Sugg<'static> {
     Sugg::MaybeParen(format!("{}{}", op, expr.maybe_par()).into())
 }
 
-/// Build the string for `<lhs> <op> <rhs>` adding parenthesis when necessary.
+/// Builds the string for `<lhs> <op> <rhs>` adding parenthesis when necessary.
 ///
 /// Precedence of shift operator relative to other arithmetic operation is
 /// often confusing so
 /// parenthesis will always be added for a mix of these.
 pub fn make_assoc(op: AssocOp, lhs: &Sugg<'_>, rhs: &Sugg<'_>) -> Sugg<'static> {
-    /// Whether the operator is a shift operator `<<` or `>>`.
+    /// Returns `true` if the operator is a shift operator `<<` or `>>`.
     fn is_shift(op: &AssocOp) -> bool {
         matches!(*op, AssocOp::ShiftLeft | AssocOp::ShiftRight)
     }
 
-    /// Whether the operator is a arithmetic operator (`+`, `-`, `*`, `/`, `%`).
+    /// Returns `true` if the operator is a arithmetic operator
+    /// (i.e., `+`, `-`, `*`, `/`, `%`).
     fn is_arith(op: &AssocOp) -> bool {
         matches!(
             *op,
@@ -289,15 +339,15 @@ pub fn make_assoc(op: AssocOp, lhs: &Sugg<'_>, rhs: &Sugg<'_>) -> Sugg<'static> 
         )
     }
 
-    /// Whether the operator `op` needs parenthesis with the operator `other`
-    /// in the direction
-    /// `dir`.
+    /// Returns `true` if the operator `op` needs parenthesis with the operator
+    /// `other` in the direction `dir`.
     fn needs_paren(op: &AssocOp, other: &AssocOp, dir: Associativity) -> bool {
         other.precedence() < op.precedence()
             || (other.precedence() == op.precedence()
                 && ((op != other && associativity(op) != dir)
                     || (op == other && associativity(op) != Associativity::Both)))
-            || is_shift(op) && is_arith(other) || is_shift(other) && is_arith(op)
+            || is_shift(op) && is_arith(other)
+            || is_shift(other) && is_arith(op)
     }
 
     let lhs_paren = if let Sugg::BinOp(ref lop, _) = *lhs {
@@ -315,27 +365,31 @@ pub fn make_assoc(op: AssocOp, lhs: &Sugg<'_>, rhs: &Sugg<'_>) -> Sugg<'static> 
     let lhs = ParenHelper::new(lhs_paren, lhs);
     let rhs = ParenHelper::new(rhs_paren, rhs);
     let sugg = match op {
-        AssocOp::Add |
-        AssocOp::BitAnd |
-        AssocOp::BitOr |
-        AssocOp::BitXor |
-        AssocOp::Divide |
-        AssocOp::Equal |
-        AssocOp::Greater |
-        AssocOp::GreaterEqual |
-        AssocOp::LAnd |
-        AssocOp::LOr |
-        AssocOp::Less |
-        AssocOp::LessEqual |
-        AssocOp::Modulus |
-        AssocOp::Multiply |
-        AssocOp::NotEqual |
-        AssocOp::ShiftLeft |
-        AssocOp::ShiftRight |
-        AssocOp::Subtract => format!("{} {} {}", lhs, op.to_ast_binop().expect("Those are AST ops").to_string(), rhs),
+        AssocOp::Add
+        | AssocOp::BitAnd
+        | AssocOp::BitOr
+        | AssocOp::BitXor
+        | AssocOp::Divide
+        | AssocOp::Equal
+        | AssocOp::Greater
+        | AssocOp::GreaterEqual
+        | AssocOp::LAnd
+        | AssocOp::LOr
+        | AssocOp::Less
+        | AssocOp::LessEqual
+        | AssocOp::Modulus
+        | AssocOp::Multiply
+        | AssocOp::NotEqual
+        | AssocOp::ShiftLeft
+        | AssocOp::ShiftRight
+        | AssocOp::Subtract => format!(
+            "{} {} {}",
+            lhs,
+            op.to_ast_binop().expect("Those are AST ops").to_string(),
+            rhs
+        ),
         AssocOp::Assign => format!("{} = {}", lhs, rhs),
-        AssocOp::ObsoleteInPlace => format!("in ({}) {}", lhs, rhs),
-        AssocOp::AssignOp(op) => format!("{} {}= {}", lhs, token_to_string(&token::BinOp(op)), rhs),
+        AssocOp::AssignOp(op) => format!("{} {}= {}", lhs, token_kind_to_string(&token::BinOp(op)), rhs),
         AssocOp::As => format!("{} as {}", lhs, rhs),
         AssocOp::DotDot => format!("{}..{}", lhs, rhs),
         AssocOp::DotDotEq => format!("{}..={}", lhs, rhs),
@@ -363,38 +417,29 @@ enum Associativity {
     Right,
 }
 
-/// Return the associativity/fixity of an operator. The difference with
-/// `AssocOp::fixity` is that
-/// an operator can be both left and right associative (such as `+`:
-/// `a + b + c == (a + b) + c == a + (b + c)`.
+/// Returns the associativity/fixity of an operator. The difference with
+/// `AssocOp::fixity` is that an operator can be both left and right associative
+/// (such as `+`: `a + b + c == (a + b) + c == a + (b + c)`.
 ///
 /// Chained `as` and explicit `:` type coercion never need inner parenthesis so
 /// they are considered
 /// associative.
+#[must_use]
 fn associativity(op: &AssocOp) -> Associativity {
-    use crate::syntax::util::parser::AssocOp::*;
+    use syntax::util::parser::AssocOp::*;
 
     match *op {
-        ObsoleteInPlace | Assign | AssignOp(_) => Associativity::Right,
+        Assign | AssignOp(_) => Associativity::Right,
         Add | BitAnd | BitOr | BitXor | LAnd | LOr | Multiply | As | Colon => Associativity::Both,
-        Divide |
-        Equal |
-        Greater |
-        GreaterEqual |
-        Less |
-        LessEqual |
-        Modulus |
-        NotEqual |
-        ShiftLeft |
-        ShiftRight |
-        Subtract => Associativity::Left,
+        Divide | Equal | Greater | GreaterEqual | Less | LessEqual | Modulus | NotEqual | ShiftLeft | ShiftRight
+        | Subtract => Associativity::Left,
         DotDot | DotDotEq => Associativity::None,
     }
 }
 
-/// Convert a `hir::BinOp` to the corresponding assigning binary operator.
+/// Converts a `hir::BinOp` to the corresponding assigning binary operator.
 fn hirbinop2assignop(op: hir::BinOp) -> AssocOp {
-    use crate::syntax::parse::token::BinOpToken::*;
+    use syntax::token::BinOpToken::*;
 
     AssocOp::AssignOp(match op.node {
         hir::BinOpKind::Add => Plus,
@@ -408,22 +453,21 @@ fn hirbinop2assignop(op: hir::BinOp) -> AssocOp {
         hir::BinOpKind::Shr => Shr,
         hir::BinOpKind::Sub => Minus,
 
-        | hir::BinOpKind::And
+        hir::BinOpKind::And
         | hir::BinOpKind::Eq
         | hir::BinOpKind::Ge
         | hir::BinOpKind::Gt
         | hir::BinOpKind::Le
         | hir::BinOpKind::Lt
         | hir::BinOpKind::Ne
-        | hir::BinOpKind::Or
-        => panic!("This operator does not exist"),
+        | hir::BinOpKind::Or => panic!("This operator does not exist"),
     })
 }
 
-/// Convert an `ast::BinOp` to the corresponding assigning binary operator.
+/// Converts an `ast::BinOp` to the corresponding assigning binary operator.
 fn astbinop2assignop(op: ast::BinOp) -> AssocOp {
-    use crate::syntax::ast::BinOpKind::*;
-    use crate::syntax::parse::token::BinOpToken;
+    use syntax::ast::BinOpKind::*;
+    use syntax::token::BinOpToken;
 
     AssocOp::AssignOp(match op.node {
         Add => BinOpToken::Plus,
@@ -440,15 +484,13 @@ fn astbinop2assignop(op: ast::BinOp) -> AssocOp {
     })
 }
 
-/// Return the indentation before `span` if there are nothing but `[ \t]`
+/// Returns the indentation before `span` if there are nothing but `[ \t]`
 /// before it on its line.
-fn indentation<'a, T: LintContext<'a>>(cx: &T, span: Span) -> Option<String> {
+fn indentation<T: LintContext>(cx: &T, span: Span) -> Option<String> {
     let lo = cx.sess().source_map().lookup_char_pos(span.lo());
-    if let Some(line) = lo.file
-        .get_line(lo.line - 1 /* line numbers in `Loc` are 1-based */)
-    {
+    if let Some(line) = lo.file.get_line(lo.line - 1 /* line numbers in `Loc` are 1-based */) {
         if let Some((pos, _)) = line.char_indices().find(|&(_, c)| c != ' ' && c != '\t') {
-            // we can mix char and byte positions here because we only consider `[ \t]`
+            // We can mix char and byte positions here because we only consider `[ \t]`.
             if lo.col == CharPos(pos) {
                 Some(line[..pos].into())
             } else {
@@ -463,7 +505,7 @@ fn indentation<'a, T: LintContext<'a>>(cx: &T, span: Span) -> Option<String> {
 }
 
 /// Convenience extension trait for `DiagnosticBuilder`.
-pub trait DiagnosticBuilderExt<'a, T: LintContext<'a>> {
+pub trait DiagnosticBuilderExt<'a, T: LintContext> {
     /// Suggests to add an attribute to an item.
     ///
     /// Correctly handles indentation of the attribute and item.
@@ -473,7 +515,14 @@ pub trait DiagnosticBuilderExt<'a, T: LintContext<'a>> {
     /// ```rust,ignore
     /// db.suggest_item_with_attr(cx, item, "#[derive(Default)]");
     /// ```
-    fn suggest_item_with_attr<D: Display + ?Sized>(&mut self, cx: &T, item: Span, msg: &str, attr: &D, applicability: Applicability);
+    fn suggest_item_with_attr<D: Display + ?Sized>(
+        &mut self,
+        cx: &T,
+        item: Span,
+        msg: &str,
+        attr: &D,
+        applicability: Applicability,
+    );
 
     /// Suggest to add an item before another.
     ///
@@ -503,17 +552,19 @@ pub trait DiagnosticBuilderExt<'a, T: LintContext<'a>> {
     fn suggest_remove_item(&mut self, cx: &T, item: Span, msg: &str, applicability: Applicability);
 }
 
-impl<'a, 'b, 'c, T: LintContext<'c>> DiagnosticBuilderExt<'c, T> for rustc_errors::DiagnosticBuilder<'b> {
-    fn suggest_item_with_attr<D: Display + ?Sized>(&mut self, cx: &T, item: Span, msg: &str, attr: &D, applicability: Applicability) {
+impl<'a, 'b, 'c, T: LintContext> DiagnosticBuilderExt<'c, T> for rustc_errors::DiagnosticBuilder<'b> {
+    fn suggest_item_with_attr<D: Display + ?Sized>(
+        &mut self,
+        cx: &T,
+        item: Span,
+        msg: &str,
+        attr: &D,
+        applicability: Applicability,
+    ) {
         if let Some(indent) = indentation(cx, item) {
             let span = item.with_hi(item.lo());
 
-            self.span_suggestion_with_applicability(
-                        span,
-                        msg,
-                        format!("{}\n{}", attr, indent),
-                        applicability,
-                        );
+            self.span_suggestion(span, msg, format!("{}\n{}", attr, indent), applicability);
         }
     }
 
@@ -534,12 +585,7 @@ impl<'a, 'b, 'c, T: LintContext<'c>> DiagnosticBuilderExt<'c, T> for rustc_error
                 })
                 .collect::<String>();
 
-            self.span_suggestion_with_applicability(
-                        span,
-                        msg,
-                        format!("{}\n{}", new_item, indent),
-                        applicability,
-                        );
+            self.span_suggestion(span, msg, format!("{}\n{}", new_item, indent), applicability);
         }
     }
 
@@ -552,15 +598,29 @@ impl<'a, 'b, 'c, T: LintContext<'c>> DiagnosticBuilderExt<'c, T> for rustc_error
             let non_whitespace_offset = src[fmpos.pos.to_usize()..].find(|c| c != ' ' && c != '\t' && c != '\n');
 
             if let Some(non_whitespace_offset) = non_whitespace_offset {
-                remove_span = remove_span.with_hi(remove_span.hi() + BytePos(non_whitespace_offset.try_into().expect("offset too large")))
+                remove_span = remove_span
+                    .with_hi(remove_span.hi() + BytePos(non_whitespace_offset.try_into().expect("offset too large")))
             }
         }
 
-        self.span_suggestion_with_applicability(
-            remove_span,
-            msg,
-            String::new(),
-            applicability,
-        );
+        self.span_suggestion(remove_span, msg, String::new(), applicability);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Sugg;
+    use std::borrow::Cow;
+
+    const SUGGESTION: Sugg<'static> = Sugg::NonParen(Cow::Borrowed("function_call()"));
+
+    #[test]
+    fn make_return_transform_sugg_into_a_return_call() {
+        assert_eq!("return function_call()", SUGGESTION.make_return().to_string());
+    }
+
+    #[test]
+    fn blockify_transforms_sugg_into_a_block() {
+        assert_eq!("{ function_call() }", SUGGESTION.blockify().to_string());
     }
 }

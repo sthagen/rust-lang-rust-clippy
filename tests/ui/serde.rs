@@ -1,15 +1,3 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![warn(clippy::serde_api_misuse)]
 #![allow(dead_code)]
 
@@ -25,13 +13,15 @@ impl<'de> serde::de::Visitor<'de> for A {
     }
 
     fn visit_str<E>(self, _v: &str) -> Result<Self::Value, E>
-        where E: serde::de::Error,
+    where
+        E: serde::de::Error,
     {
         unimplemented!()
     }
 
     fn visit_string<E>(self, _v: String) -> Result<Self::Value, E>
-        where E: serde::de::Error,
+    where
+        E: serde::de::Error,
     {
         unimplemented!()
     }
@@ -47,11 +37,11 @@ impl<'de> serde::de::Visitor<'de> for B {
     }
 
     fn visit_string<E>(self, _v: String) -> Result<Self::Value, E>
-        where E: serde::de::Error,
+    where
+        E: serde::de::Error,
     {
         unimplemented!()
     }
 }
 
-fn main() {
-}
+fn main() {}

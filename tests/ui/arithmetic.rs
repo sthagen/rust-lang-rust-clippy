@@ -1,20 +1,15 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #![warn(clippy::integer_arithmetic, clippy::float_arithmetic)]
-#![allow(unused, clippy::shadow_reuse, clippy::shadow_unrelated, clippy::no_effect, clippy::unnecessary_operation)]
+#![allow(
+    unused,
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    clippy::no_effect,
+    clippy::unnecessary_operation
+)]
+
+#[rustfmt::skip]
 fn main() {
-    let i = 1i32;
+    let mut i = 1i32;
     1 + i;
     i * 2;
     1 %
@@ -22,13 +17,30 @@ fn main() {
     i - 2 + 2 - i;
     -i;
 
+    // no error, overflows are checked by `overflowing_literals`
+    -1;
+    -(-1);
+
     i & 1; // no wrapping
     i | 1;
     i ^ 1;
     i >> 1;
     i << 1;
 
-    let f = 1.0f32;
+    i += 1;
+    i -= 1;
+    i *= 2;
+    i /= 2;
+    i %= 2;
+
+    // no errors
+    i <<= 3;
+    i >>= 2;
+    i |= 1;
+    i &= 1;
+    i ^= i;
+
+    let mut f = 1.0f32;
 
     f * 2.0;
 
@@ -37,6 +49,15 @@ fn main() {
     f / 2.0;
     f - 2.0 * 4.2;
     -f;
+
+    f += 1.0;
+    f -= 1.0;
+    f *= 2.0;
+    f /= 2.0;
+
+    // no error, overflows are checked by `overflowing_literals`
+    -1.;
+    -(-1.);
 
     // No errors for the following items because they are constant expressions
     enum Foo {

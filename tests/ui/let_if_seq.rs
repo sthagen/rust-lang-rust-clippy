@@ -1,21 +1,17 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
-#![allow(unused_variables, unused_assignments, clippy::similar_names, clippy::blacklisted_name)]
+#![allow(
+    unused_variables,
+    unused_assignments,
+    clippy::similar_names,
+    clippy::blacklisted_name
+)]
 #![warn(clippy::useless_let_if_seq)]
 
-fn f() -> bool { true }
-fn g(x: i32) -> i32 { x + 1 }
+fn f() -> bool {
+    true
+}
+fn g(x: i32) -> i32 {
+    x + 1
+}
 
 fn issue985() -> i32 {
     let mut x = 42;
@@ -73,8 +69,7 @@ fn main() {
     if f() {
         f();
         bar = 42;
-    }
-    else {
+    } else {
         f();
     }
 
@@ -113,4 +108,12 @@ fn main() {
     }
 
     baz = 1337;
+
+    // issue 3043 - types with interior mutability should not trigger this lint
+    use std::cell::Cell;
+    let mut val = Cell::new(1);
+    if true {
+        val = Cell::new(2);
+    }
+    println!("{}", val.get());
 }

@@ -1,12 +1,3 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 #![warn(clippy::explicit_counter_loop)]
 
 fn main() {
@@ -21,14 +12,26 @@ fn main() {
     for _v in &vec {
         _index += 1
     }
+
+    let mut _index = 0;
+    for _v in &mut vec {
+        _index += 1;
+    }
+
+    let mut _index = 0;
+    for _v in vec {
+        _index += 1;
+    }
 }
 
 mod issue_1219 {
     pub fn test() {
         // should not trigger the lint because variable is used after the loop #473
-        let vec = vec![1,2,3];
+        let vec = vec![1, 2, 3];
         let mut index = 0;
-        for _v in &vec { index += 1 }
+        for _v in &vec {
+            index += 1
+        }
         println!("index: {}", index);
 
         // should not trigger the lint because the count is conditional #1219
@@ -118,5 +121,27 @@ mod issue_3308 {
             }
             println!("{}", skips);
         }
+    }
+}
+
+mod issue_1670 {
+    pub fn test() {
+        let mut count = 0;
+        for _i in 3..10 {
+            count += 1;
+        }
+    }
+}
+
+mod issue_4732 {
+    pub fn test() {
+        let slice = &[1, 2, 3];
+        let mut index = 0;
+
+        // should not trigger the lint because the count is used after the loop
+        for _v in slice {
+            index += 1
+        }
+        let _closure = || println!("index: {}", index);
     }
 }

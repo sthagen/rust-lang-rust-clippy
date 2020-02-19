@@ -1,25 +1,15 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![feature(non_ascii_idents)]
-
-#![warn(clippy::all, clippy::pub_enum_variant_names)]
+#![warn(clippy::enum_variant_names, clippy::pub_enum_variant_names)]
+#![allow(non_camel_case_types)]
 
 enum FakeCallType {
-    CALL, CREATE
+    CALL,
+    CREATE,
 }
 
 enum FakeCallType2 {
-    CALL, CREATELL
+    CALL,
+    CREATELL,
 }
 
 enum Foo {
@@ -49,7 +39,8 @@ enum BadCallType {
     CallTypeDestroy,
 }
 
-enum TwoCallType { // no error
+enum TwoCallType {
+    // no error
     CallTypeCall,
     CallTypeCreate,
 }
@@ -60,7 +51,8 @@ enum Consts {
     ConstantLie,
 }
 
-enum Two { // no error here
+enum Two {
+    // no error here
     ConstantInt,
     ConstantInfer,
 }
@@ -126,6 +118,19 @@ enum N {
     Pos,
     Neg,
     Float,
+}
+
+// should not lint
+enum Peek {
+    Peek1,
+    Peek2,
+    Peek3,
+}
+
+// should not lint
+pub enum NetworkLayer {
+    Layer2,
+    Layer3,
 }
 
 fn main() {}

@@ -1,16 +1,3 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #![allow(dead_code)]
 
 extern crate core;
@@ -40,46 +27,6 @@ unsafe fn _generic<'a, T, U: 'a>(t: &'a T) {
     let _: *const U = core::intrinsics::transmute(t);
 }
 
-#[warn(clippy::transmute_ptr_to_ref)]
-unsafe fn _ptr_to_ref<T, U>(p: *const T, m: *mut T, o: *const U, om: *mut U) {
-    let _: &T = std::mem::transmute(p);
-    let _: &T = &*p;
-
-    let _: &mut T = std::mem::transmute(m);
-    let _: &mut T = &mut *m;
-
-    let _: &T = std::mem::transmute(m);
-    let _: &T = &*m;
-
-    let _: &mut T = std::mem::transmute(p as *mut T);
-    let _ = &mut *(p as *mut T);
-
-    let _: &T = std::mem::transmute(o);
-    let _: &T = &*(o as *const T);
-
-    let _: &mut T = std::mem::transmute(om);
-    let _: &mut T = &mut *(om as *mut T);
-
-    let _: &T = std::mem::transmute(om);
-    let _: &T = &*(om as *const T);
-}
-
-#[warn(clippy::transmute_ptr_to_ref)]
-fn issue1231() {
-    struct Foo<'a, T: 'a> {
-        bar: &'a T,
-    }
-
-    let raw = 42 as *const i32;
-    let _: &Foo<u8> = unsafe { std::mem::transmute::<_, &Foo<_>>(raw) };
-
-    let _: &Foo<&u8> = unsafe { std::mem::transmute::<_, &Foo<&_>>(raw) };
-
-    type Bar<'a> = &'a u8;
-    let raw = 42 as *const i32;
-    unsafe { std::mem::transmute::<_, Bar>(raw) };
-}
-
 #[warn(clippy::useless_transmute)]
 fn useless() {
     unsafe {
@@ -93,19 +40,13 @@ fn useless() {
 
         let _: Vec<i32> = my_transmute(my_vec());
 
-        let _: Vec<u32> = core::intrinsics::transmute(my_vec());
-        let _: Vec<u32> = core::mem::transmute(my_vec());
-        let _: Vec<u32> = std::intrinsics::transmute(my_vec());
-        let _: Vec<u32> = std::mem::transmute(my_vec());
-        let _: Vec<u32> = my_transmute(my_vec());
-
         let _: *const usize = std::mem::transmute(5_isize);
 
-        let _  = 5_isize as *const usize;
+        let _ = 5_isize as *const usize;
 
-        let _: *const usize = std::mem::transmute(1+1usize);
+        let _: *const usize = std::mem::transmute(1 + 1usize);
 
-        let _  = (1+1_usize) as *const usize;
+        let _ = (1 + 1_usize) as *const usize;
     }
 }
 
@@ -150,60 +91,4 @@ fn bytes_to_str(b: &[u8], mb: &mut [u8]) {
     let _: &mut str = unsafe { std::mem::transmute(mb) };
 }
 
-// Make sure we can modify lifetimes, which is one of the recommended uses
-// of transmute
-
-// Make sure we can do static lifetime transmutes
-#[warn(clippy::transmute_ptr_to_ptr)]
-unsafe fn transmute_lifetime_to_static<'a, T>(t: &'a T) -> &'static T {
-    std::mem::transmute::<&'a T, &'static T>(t)
-}
-
-// Make sure we can do non-static lifetime transmutes
-#[warn(clippy::transmute_ptr_to_ptr)]
-unsafe fn transmute_lifetime<'a, 'b, T>(t: &'a T, u: &'b T) -> &'b T {
-    std::mem::transmute::<&'a T, &'b T>(t)
-}
-
-struct LifetimeParam<'a> {
-    s: &'a str,
-}
-
-struct GenericParam<T> {
-    t: T,
-}
-
-#[warn(clippy::transmute_ptr_to_ptr)]
-fn transmute_ptr_to_ptr() {
-    let ptr = &1u32 as *const u32;
-    let mut_ptr = &mut 1u32 as *mut u32;
-    unsafe {
-        // pointer-to-pointer transmutes; bad
-        let _: *const f32 = std::mem::transmute(ptr);
-        let _: *mut f32 = std::mem::transmute(mut_ptr);
-        // ref-ref transmutes; bad
-        let _: &f32 = std::mem::transmute(&1u32);
-        let _: &f64 = std::mem::transmute(&1f32);
-        // ^ this test is here because both f32 and f64 are the same TypeVariant, but they are not
-        // the same type
-        let _: &mut f32 = std::mem::transmute(&mut 1u32);
-        let _: &GenericParam<f32> = std::mem::transmute(&GenericParam { t: 1u32 });
-    }
-
-    // these are recommendations for solving the above; if these lint we need to update
-    // those suggestions
-    let _ = ptr as *const f32;
-    let _ = mut_ptr as *mut f32;
-    let _ = unsafe { &*(&1u32 as *const u32 as *const f32) };
-    let _ = unsafe { &mut *(&mut 1u32 as *mut u32 as *mut f32) };
-
-    // transmute internal lifetimes, should not lint
-    let s = "hello world".to_owned();
-    let lp = LifetimeParam { s: &s };
-    let _: &LifetimeParam<'static> = unsafe { std::mem::transmute(&lp) };
-    let _: &GenericParam<&LifetimeParam<'static>> = unsafe {
-        std::mem::transmute(&GenericParam { t: &lp})
-    };
-}
-
-fn main() { }
+fn main() {}

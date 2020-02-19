@@ -1,23 +1,20 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![allow(clippy::trivially_copy_pass_by_ref)]
 
-
-fn fn_val(i: i32) -> i32 { unimplemented!() }
-fn fn_constref(i: &i32) -> i32 { unimplemented!() }
-fn fn_mutref(i: &mut i32) { unimplemented!() }
-fn fooi() -> i32 { unimplemented!() }
-fn foob() -> bool { unimplemented!() }
+fn fn_val(i: i32) -> i32 {
+    unimplemented!()
+}
+fn fn_constref(i: &i32) -> i32 {
+    unimplemented!()
+}
+fn fn_mutref(i: &mut i32) {
+    unimplemented!()
+}
+fn fooi() -> i32 {
+    unimplemented!()
+}
+fn foob() -> bool {
+    unimplemented!()
+}
 
 #[allow(clippy::many_single_char_names)]
 fn immutable_condition() {
@@ -143,12 +140,15 @@ fn consts() {
 
 use std::cell::Cell;
 
-fn maybe_i_mutate(i: &Cell<bool>) { unimplemented!() }
+fn maybe_i_mutate(i: &Cell<bool>) {
+    unimplemented!()
+}
 
 fn internally_mutable() {
     let b = Cell::new(true);
 
-    while b.get() {       // b cannot be silently coerced to `bool`
+    while b.get() {
+        // b cannot be silently coerced to `bool`
         maybe_i_mutate(&b);
         println!("OK - Method call within condition");
     }
@@ -177,6 +177,23 @@ impl Counter {
     }
 }
 
+fn while_loop_with_break_and_return() {
+    let y = 0;
+    while y < 10 {
+        if y == 0 {
+            break;
+        }
+        println!("KO - loop contains break");
+    }
+
+    while y < 10 {
+        if y == 0 {
+            return;
+        }
+        println!("KO - loop contains return");
+    }
+}
+
 fn main() {
     immutable_condition();
     unused_var();
@@ -186,4 +203,6 @@ fn main() {
     let mut c = Counter { count: 0 };
     c.inc_n(5);
     c.print_n(2);
+
+    while_loop_with_break_and_return();
 }

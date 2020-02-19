@@ -1,74 +1,68 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
+use crate::utils::{higher::if_block, match_type, paths, span_lint_and_then, usage::is_potentially_mutated};
 use if_chain::if_chain;
+use rustc::hir::map::Map;
+use rustc::lint::in_external_macro;
+use rustc_hir::intravisit::*;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
 
-use crate::utils::{in_macro, match_type, paths, span_lint_and_then, usage::is_potentially_mutated};
-use crate::rustc::hir::intravisit::*;
-use crate::rustc::hir::*;
-use crate::syntax::ast::NodeId;
-use crate::syntax::source_map::Span;
-
-/// **What it does:** Checks for calls of `unwrap[_err]()` that cannot fail.
-///
-/// **Why is this bad?** Using `if let` or `match` is more idiomatic.
-///
-/// **Known problems:** Limitations of the borrow checker might make unwrap() necessary sometimes?
-///
-/// **Example:**
-/// ```rust
-/// if option.is_some() {
-///     do_something_with(option.unwrap())
-/// }
-/// ```
-///
-/// Could be written:
-///
-/// ```rust
-/// if let Some(value) = option {
-///     do_something_with(value)
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for calls of `unwrap[_err]()` that cannot fail.
+    ///
+    /// **Why is this bad?** Using `if let` or `match` is more idiomatic.
+    ///
+    /// **Known problems:** None
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let option = Some(0);
+    /// # fn do_something_with(_x: usize) {}
+    /// if option.is_some() {
+    ///     do_something_with(option.unwrap())
+    /// }
+    /// ```
+    ///
+    /// Could be written:
+    ///
+    /// ```rust
+    /// # let option = Some(0);
+    /// # fn do_something_with(_x: usize) {}
+    /// if let Some(value) = option {
+    ///     do_something_with(value)
+    /// }
+    /// ```
     pub UNNECESSARY_UNWRAP,
-    nursery,
-    "checks for calls of unwrap[_err]() that cannot fail"
+    complexity,
+    "checks for calls of `unwrap[_err]()` that cannot fail"
 }
 
-/// **What it does:** Checks for calls of `unwrap[_err]()` that will always fail.
-///
-/// **Why is this bad?** If panicking is desired, an explicit `panic!()` should be used.
-///
-/// **Known problems:** This lint only checks `if` conditions not assignments.
-/// So something like `let x: Option<()> = None; x.unwrap();` will not be recognized.
-///
-/// **Example:**
-/// ```rust
-/// if option.is_none() {
-///     do_something_with(option.unwrap())
-/// }
-/// ```
-///
-/// This code will always panic. The if condition should probably be inverted.
 declare_clippy_lint! {
+    /// **What it does:** Checks for calls of `unwrap[_err]()` that will always fail.
+    ///
+    /// **Why is this bad?** If panicking is desired, an explicit `panic!()` should be used.
+    ///
+    /// **Known problems:** This lint only checks `if` conditions not assignments.
+    /// So something like `let x: Option<()> = None; x.unwrap();` will not be recognized.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let option = Some(0);
+    /// # fn do_something_with(_x: usize) {}
+    /// if option.is_none() {
+    ///     do_something_with(option.unwrap())
+    /// }
+    /// ```
+    ///
+    /// This code will always panic. The if condition should probably be inverted.
     pub PANICKING_UNWRAP,
-    nursery,
-    "checks for calls of unwrap[_err]() that will always fail"
+    correctness,
+    "checks for calls of `unwrap[_err]()` that will always fail"
 }
-
-pub struct Pass;
 
 /// Visitor that keeps track of which variables are unwrappable.
-struct UnwrappableVariablesVisitor<'a, 'tcx: 'a> {
+struct UnwrappableVariablesVisitor<'a, 'tcx> {
     unwrappables: Vec<UnwrapInfo<'tcx>>,
     cx: &'a LateContext<'a, 'tcx>,
 }
@@ -76,21 +70,21 @@ struct UnwrappableVariablesVisitor<'a, 'tcx: 'a> {
 #[derive(Copy, Clone, Debug)]
 struct UnwrapInfo<'tcx> {
     /// The variable that is checked
-    ident: &'tcx Path,
+    ident: &'tcx Path<'tcx>,
     /// The check, like `x.is_ok()`
-    check: &'tcx Expr,
+    check: &'tcx Expr<'tcx>,
     /// Whether `is_some()` or `is_ok()` was called (as opposed to `is_err()` or `is_none()`).
     safe_to_unwrap: bool,
 }
 
 /// Collects the information about unwrappable variables from an if condition
 /// The `invert` argument tells us whether the condition is negated.
-fn collect_unwrap_info<'a, 'tcx: 'a>(
+fn collect_unwrap_info<'a, 'tcx>(
     cx: &'a LateContext<'a, 'tcx>,
-    expr: &'tcx Expr,
+    expr: &'tcx Expr<'_>,
     invert: bool,
 ) -> Vec<UnwrapInfo<'tcx>> {
-    if let ExprKind::Binary(op, left, right) = &expr.node {
+    if let ExprKind::Binary(op, left, right) = &expr.kind {
         match (invert, op.node) {
             (false, BinOpKind::And) | (false, BinOpKind::BitAnd) | (true, BinOpKind::Or) | (true, BinOpKind::BitOr) => {
                 let mut unwrap_info = collect_unwrap_info(cx, left, invert);
@@ -99,12 +93,12 @@ fn collect_unwrap_info<'a, 'tcx: 'a>(
             },
             _ => (),
         }
-    } else if let ExprKind::Unary(UnNot, expr) = &expr.node {
+    } else if let ExprKind::Unary(UnOp::UnNot, expr) = &expr.kind {
         return collect_unwrap_info(cx, expr, !invert);
     } else {
         if_chain! {
-            if let ExprKind::MethodCall(method_name, _, args) = &expr.node;
-            if let ExprKind::Path(QPath::Resolved(None, path)) = &args[0].node;
+            if let ExprKind::MethodCall(method_name, _, args) = &expr.kind;
+            if let ExprKind::Path(QPath::Resolved(None, path)) = &args[0].kind;
             let ty = cx.tables.expr_ty(&args[0]);
             if match_type(cx, ty, &paths::OPTION) || match_type(cx, ty, &paths::RESULT);
             let name = method_name.ident.as_str();
@@ -124,8 +118,8 @@ fn collect_unwrap_info<'a, 'tcx: 'a>(
     Vec::new()
 }
 
-impl<'a, 'tcx: 'a> UnwrappableVariablesVisitor<'a, 'tcx> {
-    fn visit_branch(&mut self, cond: &'tcx Expr, branch: &'tcx Expr, else_branch: bool) {
+impl<'a, 'tcx> UnwrappableVariablesVisitor<'a, 'tcx> {
+    fn visit_branch(&mut self, cond: &'tcx Expr<'_>, branch: &'tcx Expr<'_>, else_branch: bool) {
         let prev_len = self.unwrappables.len();
         for unwrap_info in collect_unwrap_info(self.cx, cond, else_branch) {
             if is_potentially_mutated(unwrap_info.ident, cond, self.cx)
@@ -141,9 +135,15 @@ impl<'a, 'tcx: 'a> UnwrappableVariablesVisitor<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx: 'a> Visitor<'tcx> for UnwrappableVariablesVisitor<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx Expr) {
-        if let ExprKind::If(cond, then, els) = &expr.node {
+impl<'a, 'tcx> Visitor<'tcx> for UnwrappableVariablesVisitor<'a, 'tcx> {
+    type Map = Map<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx Expr<'_>) {
+        // Shouldn't lint when `expr` is in macro.
+        if in_external_macro(self.cx.tcx.sess, expr.span) {
+            return;
+        }
+        if let Some((cond, then, els)) = if_block(&expr) {
             walk_expr(self, cond);
             self.visit_branch(cond, then, false);
             if let Some(els) = els {
@@ -152,12 +152,12 @@ impl<'a, 'tcx: 'a> Visitor<'tcx> for UnwrappableVariablesVisitor<'a, 'tcx> {
         } else {
             // find `unwrap[_err]()` calls:
             if_chain! {
-                if let ExprKind::MethodCall(ref method_name, _, ref args) = expr.node;
-                if let ExprKind::Path(QPath::Resolved(None, ref path)) = args[0].node;
-                if ["unwrap", "unwrap_err"].contains(&&*method_name.ident.as_str());
-                let call_to_unwrap = method_name.ident.name == "unwrap";
+                if let ExprKind::MethodCall(ref method_name, _, ref args) = expr.kind;
+                if let ExprKind::Path(QPath::Resolved(None, ref path)) = args[0].kind;
+                if [sym!(unwrap), sym!(unwrap_err)].contains(&method_name.ident.name);
+                let call_to_unwrap = method_name.ident.name == sym!(unwrap);
                 if let Some(unwrappable) = self.unwrappables.iter()
-                    .find(|u| u.ident.def == path.def);
+                    .find(|u| u.ident.res == path.res);
                 then {
                     if call_to_unwrap == unwrappable.safe_to_unwrap {
                         span_lint_and_then(
@@ -185,28 +185,24 @@ impl<'a, 'tcx: 'a> Visitor<'tcx> for UnwrappableVariablesVisitor<'a, 'tcx> {
         }
     }
 
-    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
-        NestedVisitorMap::OnlyBodies(&self.cx.tcx.hir)
+    fn nested_visit_map(&mut self) -> NestedVisitorMap<'_, Self::Map> {
+        NestedVisitorMap::OnlyBodies(&self.cx.tcx.hir())
     }
 }
 
-impl<'a> LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(PANICKING_UNWRAP, UNNECESSARY_UNWRAP)
-    }
-}
+declare_lint_pass!(Unwrap => [PANICKING_UNWRAP, UNNECESSARY_UNWRAP]);
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Unwrap {
     fn check_fn(
         &mut self,
         cx: &LateContext<'a, 'tcx>,
         kind: FnKind<'tcx>,
-        decl: &'tcx FnDecl,
-        body: &'tcx Body,
+        decl: &'tcx FnDecl<'_>,
+        body: &'tcx Body<'_>,
         span: Span,
-        fn_id: NodeId,
+        fn_id: HirId,
     ) {
-        if in_macro(span) {
+        if span.from_expansion() {
             return;
         }
 

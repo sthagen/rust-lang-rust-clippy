@@ -1,20 +1,8 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![warn(clippy::default_trait_access)]
 
+use std::default;
 use std::default::Default as D2;
 use std::string;
-use std::default;
 
 fn main() {
     let s1: String = Default::default();

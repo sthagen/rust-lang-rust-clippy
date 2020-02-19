@@ -1,20 +1,17 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
 #![warn(clippy::needless_pass_by_value)]
-#![allow(dead_code, clippy::single_match, clippy::redundant_pattern_matching, clippy::many_single_char_names, clippy::option_option)]
+#![allow(
+    dead_code,
+    clippy::single_match,
+    clippy::redundant_pattern_matching,
+    clippy::many_single_char_names,
+    clippy::option_option,
+    clippy::redundant_clone
+)]
 
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::convert::AsRef;
+use std::mem::MaybeUninit;
 
 // `v` should be warned
 // `w`, `x` and `y` are allowed (moved or mutated)
@@ -92,24 +89,19 @@ struct S<T, U>(T, U);
 
 impl<T: Serialize, U> S<T, U> {
     fn foo(
-        self, // taking `self` by value is always allowed
+        self,
+        // taking `self` by value is always allowed
         s: String,
         t: String,
     ) -> usize {
         s.len() + t.capacity()
     }
 
-    fn bar(
-        _t: T, // Ok, since `&T: Serialize` too
+    fn bar(_t: T, // Ok, since `&T: Serialize` too
     ) {
     }
 
-    fn baz(
-        &self,
-        _u: U,
-        _s: Self,
-    ) {
-    }
+    fn baz(&self, _u: U, _s: Self) {}
 }
 
 trait FalsePositive {
@@ -120,7 +112,9 @@ trait FalsePositive {
 }
 
 // shouldn't warn on extern funcs
-extern "C" fn ext(x: String) -> usize { x.len() }
+extern "C" fn ext(x: MaybeUninit<usize>) -> usize {
+    unsafe { x.assume_init() }
+}
 
 // whitelist RangeArgument
 fn range<T: ::std::ops::RangeBounds<usize>>(range: T) {
@@ -154,4 +148,14 @@ trait Club<'a, A> {}
 impl<T> Club<'static, T> for T {}
 fn more_fun(_item: impl Club<'static, i32>) {}
 
-fn main() {}
+fn is_sync<T>(_: T)
+where
+    T: Sync,
+{
+}
+
+fn main() {
+    // This should not cause an ICE either
+    // https://github.com/rust-lang/rust-clippy/issues/3144
+    is_sync(HashSet::<usize>::new());
+}

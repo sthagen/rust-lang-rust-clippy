@@ -1,82 +1,71 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 //! lint on inherent implementations
 
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc_data_structures::fx::FxHashMap;
-use std::default::Default;
-use crate::syntax_pos::Span;
-use crate::utils::span_lint_and_then;
+use crate::utils::{in_macro, span_lint_and_then};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_tool_lint, impl_lint_pass};
+use rustc_span::Span;
 
-/// **What it does:** Checks for multiple inherent implementations of a struct
-///
-/// **Why is this bad?** Splitting the implementation of a type makes the code harder to navigate.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// struct X;
-/// impl X {
-///     fn one() {}
-/// }
-/// impl X {
-///     fn other() {}
-/// }
-/// ```
-///
-/// Could be written:
-///
-/// ```rust
-/// struct X;
-/// impl X {
-///     fn one() {}
-///     fn other() {}
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for multiple inherent implementations of a struct
+    ///
+    /// **Why is this bad?** Splitting the implementation of a type makes the code harder to navigate.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// struct X;
+    /// impl X {
+    ///     fn one() {}
+    /// }
+    /// impl X {
+    ///     fn other() {}
+    /// }
+    /// ```
+    ///
+    /// Could be written:
+    ///
+    /// ```rust
+    /// struct X;
+    /// impl X {
+    ///     fn one() {}
+    ///     fn other() {}
+    /// }
+    /// ```
     pub MULTIPLE_INHERENT_IMPL,
     restriction,
     "Multiple inherent impl that could be grouped"
 }
 
-pub struct Pass {
-    impls: FxHashMap<def_id::DefId, (Span, Generics)>,
+#[allow(clippy::module_name_repetitions)]
+#[derive(Default)]
+pub struct MultipleInherentImpl {
+    impls: FxHashMap<def_id::DefId, Span>,
 }
 
-impl Default for Pass {
-    fn default() -> Self {
-        Self { impls: FxHashMap::default() }
-    }
-}
+impl_lint_pass!(MultipleInherentImpl => [MULTIPLE_INHERENT_IMPL]);
 
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(MULTIPLE_INHERENT_IMPL)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_item(&mut self, _: &LateContext<'a, 'tcx>, item: &'tcx Item) {
-        if let ItemKind::Impl(_, _, _, ref generics, None, _, _) = item.node {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for MultipleInherentImpl {
+    fn check_item(&mut self, _: &LateContext<'a, 'tcx>, item: &'tcx Item<'_>) {
+        if let ItemKind::Impl {
+            ref generics,
+            of_trait: None,
+            ..
+        } = item.kind
+        {
             // Remember for each inherent implementation encoutered its span and generics
-            self.impls
-                .insert(item.hir_id.owner_def_id(), (item.span, generics.clone()));
+            // but filter out implementations that have generic params (type or lifetime)
+            // or are derived from a macro
+            if !in_macro(item.span) && generics.params.is_empty() {
+                self.impls.insert(item.hir_id.owner_def_id(), item.span);
+            }
         }
     }
 
-    fn check_crate_post(&mut self, cx: &LateContext<'a, 'tcx>, krate: &'tcx Crate) {
-        if let Some(item) = krate.items.values().nth(0) {
+    fn check_crate_post(&mut self, cx: &LateContext<'a, 'tcx>, krate: &'tcx Crate<'_>) {
+        if let Some(item) = krate.items.values().next() {
             // Retrieve all inherent implementations from the crate, grouped by type
             for impls in cx
                 .tcx
@@ -85,15 +74,8 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
                 .values()
             {
                 // Filter out implementations that have generic params (type or lifetime)
-                let mut impl_spans = impls
-                    .iter()
-                    .filter_map(|impl_def| self.impls.get(impl_def))
-                    .filter_map(|(span, generics)| if generics.params.len() == 0 {
-                        Some(span)
-                    } else {
-                        None
-                    });
-                if let Some(initial_span) = impl_spans.nth(0) {
+                let mut impl_spans = impls.iter().filter_map(|impl_def| self.impls.get(impl_def));
+                if let Some(initial_span) = impl_spans.next() {
                     impl_spans.for_each(|additional_span| {
                         span_lint_and_then(
                             cx,
@@ -101,10 +83,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
                             *additional_span,
                             "Multiple implementations of this structure",
                             |db| {
-                                db.span_note(
-                                    *initial_span,
-                                    "First implementation here",
-                                );
+                                db.span_note(*initial_span, "First implementation here");
                             },
                         )
                     })

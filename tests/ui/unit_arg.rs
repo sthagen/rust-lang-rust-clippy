@@ -1,17 +1,6 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
+// run-rustfix
 #![warn(clippy::unit_arg)]
-#![allow(clippy::no_effect)]
+#![allow(clippy::no_effect, unused_must_use)]
 
 use std::fmt::Debug;
 
@@ -33,7 +22,9 @@ impl Bar {
 
 fn bad() {
     foo({});
-    foo({ 1; });
+    foo({
+        1;
+    });
     foo(foo(1));
     foo({
         foo(1);
@@ -41,7 +32,9 @@ fn bad() {
     });
     foo3({}, 2, 2);
     let b = Bar;
-    b.bar({ 1; });
+    b.bar({
+        1;
+    });
 }
 
 fn ok() {
@@ -59,6 +52,17 @@ fn question_mark() -> Result<(), ()> {
     Ok(Ok(())?)?;
     Ok(Ok(()))??;
     Ok(())
+}
+
+#[allow(dead_code)]
+mod issue_2945 {
+    fn unit_fn() -> Result<(), i32> {
+        Ok(())
+    }
+
+    fn fallible() -> Result<(), i32> {
+        Ok(unit_fn()?)
+    }
 }
 
 fn main() {

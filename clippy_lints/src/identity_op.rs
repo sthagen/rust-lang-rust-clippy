@@ -1,53 +1,38 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
+use rustc::ty;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
 
 use crate::consts::{constant_simple, Constant};
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::syntax::source_map::Span;
-use crate::utils::{in_macro, snippet, span_lint, unsext, clip};
-use crate::rustc::ty;
+use crate::utils::{clip, snippet, span_lint, unsext};
 
-/// **What it does:** Checks for identity operations, e.g. `x + 0`.
-///
-/// **Why is this bad?** This code can be removed without changing the
-/// meaning. So it just obscures what's going on. Delete it mercilessly.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// x / 1 + 0 * 1 - 0 | 0
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for identity operations, e.g., `x + 0`.
+    ///
+    /// **Why is this bad?** This code can be removed without changing the
+    /// meaning. So it just obscures what's going on. Delete it mercilessly.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let x = 1;
+    /// x / 1 + 0 * 1 - 0 | 0;
+    /// ```
     pub IDENTITY_OP,
     complexity,
-    "using identity operations, e.g. `x + 0` or `y / 1`"
+    "using identity operations, e.g., `x + 0` or `y / 1`"
 }
 
-#[derive(Copy, Clone)]
-pub struct IdentityOp;
-
-impl LintPass for IdentityOp {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(IDENTITY_OP)
-    }
-}
+declare_lint_pass!(IdentityOp => [IDENTITY_OP]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for IdentityOp {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, e: &'tcx Expr) {
-        if in_macro(e.span) {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, e: &'tcx Expr<'_>) {
+        if e.span.from_expansion() {
             return;
         }
-        if let ExprKind::Binary(ref cmp, ref left, ref right) = e.node {
+        if let ExprKind::Binary(ref cmp, ref left, ref right) = e.kind {
             match cmp.node {
                 BinOpKind::Add | BinOpKind::BitOr | BinOpKind::BitXor => {
                     check(cx, left, 0, e.span, right.span);
@@ -70,9 +55,9 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for IdentityOp {
 }
 
 #[allow(clippy::cast_possible_wrap)]
-fn check(cx: &LateContext<'_, '_>, e: &Expr, m: i8, span: Span, arg: Span) {
+fn check(cx: &LateContext<'_, '_>, e: &Expr<'_>, m: i8, span: Span, arg: Span) {
     if let Some(Constant::Int(v)) = constant_simple(cx, cx.tables, e) {
-        let check = match cx.tables.expr_ty(e).sty {
+        let check = match cx.tables.expr_ty(e).kind {
             ty::Int(ity) => unsext(cx.tcx, -1_i128, ity),
             ty::Uint(uty) => clip(cx.tcx, !0, uty),
             _ => return,

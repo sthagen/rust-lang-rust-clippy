@@ -1,30 +1,70 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// Dogfood cannot run on Windows
+#![cfg(not(windows))]
 
+use lazy_static::lazy_static;
+use std::path::PathBuf;
+use std::process::Command;
+
+mod cargo;
+
+lazy_static! {
+    static ref CLIPPY_PATH: PathBuf = cargo::TARGET_LIB.join("cargo-clippy");
+}
 
 #[test]
-fn dogfood() {
-    if option_env!("RUSTC_TEST_SUITE").is_some() || cfg!(windows) {
+fn dogfood_clippy() {
+    // run clippy on itself and fail the test if lint warnings are reported
+    if cargo::is_rustc_test_suite() {
         return;
     }
-    let root_dir = std::env::current_dir().unwrap();
-    for d in &[".", "clippy_lints", "rustc_tools_util", "clippy_dev"] {
-        std::env::set_current_dir(root_dir.join(d)).unwrap();
-        let output = std::process::Command::new("cargo")
-            .arg("run")
-            .arg("--bin")
-            .arg("cargo-clippy")
-            .arg("--all-features")
-            .arg("--manifest-path")
-            .arg(root_dir.join("Cargo.toml"))
-            .args(&["--", "-W clippy::internal -W clippy::pedantic"])
-            .env("CLIPPY_DOGFOOD", "true")
+    let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let output = Command::new(&*CLIPPY_PATH)
+        .current_dir(root_dir)
+        .env("CLIPPY_DOGFOOD", "1")
+        .env("CARGO_INCREMENTAL", "0")
+        .arg("clippy-preview")
+        .arg("--all-targets")
+        .arg("--all-features")
+        .arg("--")
+        .args(&["-D", "clippy::all"])
+        .args(&["-D", "clippy::internal"])
+        .args(&["-D", "clippy::pedantic"])
+        .arg("-Cdebuginfo=0") // disable debuginfo to generate less data in the target dir
+        .output()
+        .unwrap();
+    println!("status: {}", output.status);
+    println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+    println!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn dogfood_subprojects() {
+    // run clippy on remaining subprojects and fail the test if lint warnings are reported
+    if cargo::is_rustc_test_suite() {
+        return;
+    }
+    let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    for d in &[
+        "clippy_workspace_tests",
+        "clippy_workspace_tests/src",
+        "clippy_workspace_tests/subcrate",
+        "clippy_workspace_tests/subcrate/src",
+        "clippy_dev",
+        "rustc_tools_util",
+    ] {
+        let output = Command::new(&*CLIPPY_PATH)
+            .current_dir(root_dir.join(d))
+            .env("CLIPPY_DOGFOOD", "1")
+            .env("CARGO_INCREMENTAL", "0")
+            .arg("clippy")
+            .arg("--")
+            .args(&["-D", "clippy::all"])
+            .args(&["-D", "clippy::pedantic"])
+            .arg("-Cdebuginfo=0") // disable debuginfo to generate less data in the target dir
             .output()
             .unwrap();
         println!("status: {}", output.status);

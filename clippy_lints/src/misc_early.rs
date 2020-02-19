@@ -1,205 +1,278 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintPass, LintContext, in_external_macro};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc_data_structures::fx::FxHashMap;
+use crate::utils::{
+    constants, snippet_opt, snippet_with_applicability, span_lint, span_lint_and_help, span_lint_and_sugg,
+    span_lint_and_then,
+};
 use if_chain::if_chain;
-use std::char;
-use crate::syntax::ast::*;
-use crate::syntax::source_map::Span;
-use crate::syntax::visit::FnKind;
-use crate::utils::{constants, snippet, snippet_opt, span_help_and_lint, span_lint, span_lint_and_then};
-use crate::rustc_errors::Applicability;
+use rustc::lint::in_external_macro;
+use rustc_data_structures::fx::FxHashMap;
+use rustc_errors::Applicability;
+use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
+use syntax::ast::*;
+use syntax::visit::{walk_expr, FnKind, Visitor};
 
-/// **What it does:** Checks for structure field patterns bound to wildcards.
-///
-/// **Why is this bad?** Using `..` instead is shorter and leaves the focus on
-/// the fields that are actually bound.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// let { a: _, b: ref b, c: _ } = ..
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for structure field patterns bound to wildcards.
+    ///
+    /// **Why is this bad?** Using `..` instead is shorter and leaves the focus on
+    /// the fields that are actually bound.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// let { a: _, b: ref b, c: _ } = ..
+    /// ```
     pub UNNEEDED_FIELD_PATTERN,
     style,
     "struct fields bound to a wildcard instead of using `..`"
 }
 
-/// **What it does:** Checks for function arguments having the similar names
-/// differing by an underscore.
-///
-/// **Why is this bad?** It affects code readability.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// fn foo(a: i32, _a: i32) {}
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for function arguments having the similar names
+    /// differing by an underscore.
+    ///
+    /// **Why is this bad?** It affects code readability.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// fn foo(a: i32, _a: i32) {}
+    /// ```
     pub DUPLICATE_UNDERSCORE_ARGUMENT,
     style,
     "function arguments having names which only differ by an underscore"
 }
 
-/// **What it does:** Detects closures called in the same expression where they
-/// are defined.
-///
-/// **Why is this bad?** It is unnecessarily adding to the expression's
-/// complexity.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// (|| 42)()
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Detects closures called in the same expression where they
+    /// are defined.
+    ///
+    /// **Why is this bad?** It is unnecessarily adding to the expression's
+    /// complexity.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust,ignore
+    /// (|| 42)()
+    /// ```
     pub REDUNDANT_CLOSURE_CALL,
     complexity,
     "throwaway closures called in the expression they are defined"
 }
 
-/// **What it does:** Detects expressions of the form `--x`.
-///
-/// **Why is this bad?** It can mislead C/C++ programmers to think `x` was
-/// decremented.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// --x;
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Detects expressions of the form `--x`.
+    ///
+    /// **Why is this bad?** It can mislead C/C++ programmers to think `x` was
+    /// decremented.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let mut x = 3;
+    /// --x;
+    /// ```
     pub DOUBLE_NEG,
     style,
     "`--x`, which is a double negation of `x` and not a pre-decrement as in C/C++"
 }
 
-/// **What it does:** Warns on hexadecimal literals with mixed-case letter
-/// digits.
-///
-/// **Why is this bad?** It looks confusing.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// let y = 0x1a9BAcD;
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Warns on hexadecimal literals with mixed-case letter
+    /// digits.
+    ///
+    /// **Why is this bad?** It looks confusing.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let y = 0x1a9BAcD;
+    /// ```
     pub MIXED_CASE_HEX_LITERALS,
     style,
     "hex literals whose letter digits are not consistently upper- or lowercased"
 }
 
-/// **What it does:** Warns if literal suffixes are not separated by an
-/// underscore.
-///
-/// **Why is this bad?** It is much less readable.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// let y = 123832i32;
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Warns if literal suffixes are not separated by an
+    /// underscore.
+    ///
+    /// **Why is this bad?** It is much less readable.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let y = 123832i32;
+    /// ```
     pub UNSEPARATED_LITERAL_SUFFIX,
     pedantic,
     "literals whose suffix is not separated by an underscore"
 }
 
-/// **What it does:** Warns if an integral constant literal starts with `0`.
-///
-/// **Why is this bad?** In some languages (including the infamous C language
-/// and most of its
-/// family), this marks an octal constant. In Rust however, this is a decimal
-/// constant. This could
-/// be confusing for both the writer and a reader of the constant.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-///
-/// In Rust:
-/// ```rust
-/// fn main() {
-///     let a = 0123;
-///     println!("{}", a);
-/// }
-/// ```
-///
-/// prints `123`, while in C:
-///
-/// ```c
-/// #include <stdio.h>
-///
-/// int main() {
-///     int a = 0123;
-///     printf("%d\n", a);
-/// }
-/// ```
-///
-/// prints `83` (as `83 == 0o123` while `123 == 0o173`).
 declare_clippy_lint! {
+    /// **What it does:** Warns if an integral constant literal starts with `0`.
+    ///
+    /// **Why is this bad?** In some languages (including the infamous C language
+    /// and most of its
+    /// family), this marks an octal constant. In Rust however, this is a decimal
+    /// constant. This could
+    /// be confusing for both the writer and a reader of the constant.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    ///
+    /// In Rust:
+    /// ```rust
+    /// fn main() {
+    ///     let a = 0123;
+    ///     println!("{}", a);
+    /// }
+    /// ```
+    ///
+    /// prints `123`, while in C:
+    ///
+    /// ```c
+    /// #include <stdio.h>
+    ///
+    /// int main() {
+    ///     int a = 0123;
+    ///     printf("%d\n", a);
+    /// }
+    /// ```
+    ///
+    /// prints `83` (as `83 == 0o123` while `123 == 0o173`).
     pub ZERO_PREFIXED_LITERAL,
     complexity,
     "integer literals starting with `0`"
 }
 
-/// **What it does:** Warns if a generic shadows a built-in type.
-///
-/// **Why is this bad?** This gives surprising type errors.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-///
-/// ```rust
-/// impl<u32> Foo<u32> {
-///     fn impl_func(&self) -> u32 {
-///         42
-///     }
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Warns if a generic shadows a built-in type.
+    ///
+    /// **Why is this bad?** This gives surprising type errors.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    ///
+    /// ```ignore
+    /// impl<u32> Foo<u32> {
+    ///     fn impl_func(&self) -> u32 {
+    ///         42
+    ///     }
+    /// }
+    /// ```
     pub BUILTIN_TYPE_SHADOW,
     style,
     "shadowing a builtin type"
 }
 
-#[derive(Copy, Clone)]
-pub struct MiscEarly;
+declare_clippy_lint! {
+    /// **What it does:** Checks for patterns in the form `name @ _`.
+    ///
+    /// **Why is this bad?** It's almost always more readable to just use direct
+    /// bindings.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let v = Some("abc");
+    ///
+    /// match v {
+    ///     Some(x) => (),
+    ///     y @ _ => (), // easier written as `y`,
+    /// }
+    /// ```
+    pub REDUNDANT_PATTERN,
+    style,
+    "using `name @ _` in a pattern"
+}
 
-impl LintPass for MiscEarly {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(
-            UNNEEDED_FIELD_PATTERN,
-            DUPLICATE_UNDERSCORE_ARGUMENT,
-            REDUNDANT_CLOSURE_CALL,
-            DOUBLE_NEG,
-            MIXED_CASE_HEX_LITERALS,
-            UNSEPARATED_LITERAL_SUFFIX,
-            ZERO_PREFIXED_LITERAL,
-            BUILTIN_TYPE_SHADOW
-        )
+declare_clippy_lint! {
+    /// **What it does:** Checks for tuple patterns with a wildcard
+    /// pattern (`_`) is next to a rest pattern (`..`).
+    ///
+    /// _NOTE_: While `_, ..` means there is at least one element left, `..`
+    /// means there are 0 or more elements left. This can make a difference
+    /// when refactoring, but shouldn't result in errors in the refactored code,
+    /// since the wildcard pattern isn't used anyway.
+    /// **Why is this bad?** The wildcard pattern is unneeded as the rest pattern
+    /// can match that element as well.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # struct TupleStruct(u32, u32, u32);
+    /// # let t = TupleStruct(1, 2, 3);
+    ///
+    /// match t {
+    ///     TupleStruct(0, .., _) => (),
+    ///     _ => (),
+    /// }
+    /// ```
+    /// can be written as
+    /// ```rust
+    /// # struct TupleStruct(u32, u32, u32);
+    /// # let t = TupleStruct(1, 2, 3);
+    ///
+    /// match t {
+    ///     TupleStruct(0, ..) => (),
+    ///     _ => (),
+    /// }
+    /// ```
+    pub UNNEEDED_WILDCARD_PATTERN,
+    complexity,
+    "tuple patterns with a wildcard pattern (`_`) is next to a rest pattern (`..`)"
+}
+
+declare_lint_pass!(MiscEarlyLints => [
+    UNNEEDED_FIELD_PATTERN,
+    DUPLICATE_UNDERSCORE_ARGUMENT,
+    REDUNDANT_CLOSURE_CALL,
+    DOUBLE_NEG,
+    MIXED_CASE_HEX_LITERALS,
+    UNSEPARATED_LITERAL_SUFFIX,
+    ZERO_PREFIXED_LITERAL,
+    BUILTIN_TYPE_SHADOW,
+    REDUNDANT_PATTERN,
+    UNNEEDED_WILDCARD_PATTERN,
+]);
+
+// Used to find `return` statements or equivalents e.g., `?`
+struct ReturnVisitor {
+    found_return: bool,
+}
+
+impl ReturnVisitor {
+    #[must_use]
+    fn new() -> Self {
+        Self { found_return: false }
     }
 }
 
-impl EarlyLintPass for MiscEarly {
+impl<'ast> Visitor<'ast> for ReturnVisitor {
+    fn visit_expr(&mut self, ex: &'ast Expr) {
+        if let ExprKind::Ret(_) = ex.kind {
+            self.found_return = true;
+        } else if let ExprKind::Try(_) = ex.kind {
+            self.found_return = true;
+        }
+
+        walk_expr(self, ex)
+    }
+}
+
+impl EarlyLintPass for MiscEarlyLints {
     fn check_generics(&mut self, cx: &EarlyContext<'_>, gen: &Generics) {
         for param in &gen.params {
             if let GenericParamKind::Type { .. } = param.kind {
@@ -217,21 +290,22 @@ impl EarlyLintPass for MiscEarly {
     }
 
     fn check_pat(&mut self, cx: &EarlyContext<'_>, pat: &Pat) {
-        if let PatKind::Struct(ref npat, ref pfields, _) = pat.node {
+        if let PatKind::Struct(ref npat, ref pfields, _) = pat.kind {
             let mut wilds = 0;
-            let type_name = npat.segments
+            let type_name = npat
+                .segments
                 .last()
                 .expect("A path must have at least one segment")
                 .ident
                 .name;
 
             for field in pfields {
-                if let PatKind::Wild = field.node.pat.node {
+                if let PatKind::Wild = field.pat.kind {
                     wilds += 1;
                 }
             }
             if !pfields.is_empty() && wilds == pfields.len() {
-                span_help_and_lint(
+                span_lint_and_help(
                     cx,
                     UNNEEDED_FIELD_PATTERN,
                     pat.span,
@@ -244,15 +318,17 @@ impl EarlyLintPass for MiscEarly {
                 let mut normal = vec![];
 
                 for field in pfields {
-                    match field.node.pat.node {
+                    match field.pat.kind {
                         PatKind::Wild => {},
-                        _ => if let Ok(n) = cx.sess().source_map().span_to_snippet(field.span) {
-                            normal.push(n);
+                        _ => {
+                            if let Ok(n) = cx.sess().source_map().span_to_snippet(field.span) {
+                                normal.push(n);
+                            }
                         },
                     }
                 }
                 for field in pfields {
-                    if let PatKind::Wild = field.node.pat.node {
+                    if let PatKind::Wild = field.pat.kind {
                         wilds -= 1;
                         if wilds > 0 {
                             span_lint(
@@ -262,7 +338,7 @@ impl EarlyLintPass for MiscEarly {
                                 "You matched a field with a wildcard pattern. Consider using `..` instead",
                             );
                         } else {
-                            span_help_and_lint(
+                            span_lint_and_help(
                                 cx,
                                 UNNEEDED_FIELD_PATTERN,
                                 field.span,
@@ -275,13 +351,32 @@ impl EarlyLintPass for MiscEarly {
                 }
             }
         }
+
+        if let PatKind::Ident(_, ident, Some(ref right)) = pat.kind {
+            if let PatKind::Wild = right.kind {
+                span_lint_and_sugg(
+                    cx,
+                    REDUNDANT_PATTERN,
+                    pat.span,
+                    &format!(
+                        "the `{} @ _` pattern can be written as just `{}`",
+                        ident.name, ident.name,
+                    ),
+                    "try",
+                    format!("{}", ident.name),
+                    Applicability::MachineApplicable,
+                );
+            }
+        }
+
+        check_unneeded_wildcard_pattern(cx, pat);
     }
 
-    fn check_fn(&mut self, cx: &EarlyContext<'_>, _: FnKind<'_>, decl: &FnDecl, _: Span, _: NodeId) {
+    fn check_fn(&mut self, cx: &EarlyContext<'_>, fn_kind: FnKind<'_>, _: Span, _: NodeId) {
         let mut registered_names: FxHashMap<String, Span> = FxHashMap::default();
 
-        for arg in &decl.inputs {
-            if let PatKind::Ident(_, ident, None) = arg.pat.node {
+        for arg in &fn_kind.decl().inputs {
+            if let PatKind::Ident(_, ident, None) = arg.pat.kind {
                 let arg_name = ident.to_string();
 
                 if arg_name.starts_with('_') {
@@ -295,7 +390,7 @@ impl EarlyLintPass for MiscEarly {
                                  name makes code comprehension and documentation more difficult",
                                 arg_name[1..].to_owned()
                             ),
-                        );;
+                        );
                     }
                 } else {
                     registered_names.insert(arg_name, arg.pat.span);
@@ -308,35 +403,42 @@ impl EarlyLintPass for MiscEarly {
         if in_external_macro(cx.sess(), expr.span) {
             return;
         }
-        match expr.node {
-            ExprKind::Call(ref paren, _) => if let ExprKind::Paren(ref closure) = paren.node {
-                if let ExprKind::Closure(_, _, _, ref decl, ref block, _) = closure.node {
-                    span_lint_and_then(
-                        cx,
-                        REDUNDANT_CLOSURE_CALL,
-                        expr.span,
-                        "Try not to call a closure in the expression where it is declared.",
-                        |db| if decl.inputs.is_empty() {
-                            let hint = snippet(cx, block.span, "..").into_owned();
-                            db.span_suggestion_with_applicability(
+        match expr.kind {
+            ExprKind::Call(ref paren, _) => {
+                if let ExprKind::Paren(ref closure) = paren.kind {
+                    if let ExprKind::Closure(_, _, _, ref decl, ref block, _) = closure.kind {
+                        let mut visitor = ReturnVisitor::new();
+                        visitor.visit_expr(block);
+                        if !visitor.found_return {
+                            span_lint_and_then(
+                                cx,
+                                REDUNDANT_CLOSURE_CALL,
                                 expr.span,
-                                "Try doing something like: ",
-                                hint,
-                                Applicability::MachineApplicable, // snippet
+                                "Try not to call a closure in the expression where it is declared.",
+                                |db| {
+                                    if decl.inputs.is_empty() {
+                                        let mut app = Applicability::MachineApplicable;
+                                        let hint =
+                                            snippet_with_applicability(cx, block.span, "..", &mut app).into_owned();
+                                        db.span_suggestion(expr.span, "Try doing something like: ", hint, app);
+                                    }
+                                },
                             );
-                        },
+                        }
+                    }
+                }
+            },
+            ExprKind::Unary(UnOp::Neg, ref inner) => {
+                if let ExprKind::Unary(UnOp::Neg, _) = inner.kind {
+                    span_lint(
+                        cx,
+                        DOUBLE_NEG,
+                        expr.span,
+                        "`--x` could be misinterpreted as pre-decrement by C programmers, is usually a no-op",
                     );
                 }
             },
-            ExprKind::Unary(UnOp::Neg, ref inner) => if let ExprKind::Unary(UnOp::Neg, _) = inner.node {
-                span_lint(
-                    cx,
-                    DOUBLE_NEG,
-                    expr.span,
-                    "`--x` could be misinterpreted as pre-decrement by C programmers, is usually a no-op",
-                );
-            },
-            ExprKind::Lit(ref lit) => self.check_lit(cx, lit),
+            ExprKind::Lit(ref lit) => Self::check_lit(cx, lit),
             _ => (),
         }
     }
@@ -344,14 +446,14 @@ impl EarlyLintPass for MiscEarly {
     fn check_block(&mut self, cx: &EarlyContext<'_>, block: &Block) {
         for w in block.stmts.windows(2) {
             if_chain! {
-                if let StmtKind::Local(ref local) = w[0].node;
+                if let StmtKind::Local(ref local) = w[0].kind;
                 if let Option::Some(ref t) = local.init;
-                if let ExprKind::Closure(..) = t.node;
-                if let PatKind::Ident(_, ident, _) = local.pat.node;
-                if let StmtKind::Semi(ref second) = w[1].node;
-                if let ExprKind::Assign(_, ref call) = second.node;
-                if let ExprKind::Call(ref closure, _) = call.node;
-                if let ExprKind::Path(_, ref path) = closure.node;
+                if let ExprKind::Closure(..) = t.kind;
+                if let PatKind::Ident(_, ident, _) = local.pat.kind;
+                if let StmtKind::Semi(ref second) = w[1].kind;
+                if let ExprKind::Assign(_, ref call, _) = second.kind;
+                if let ExprKind::Call(ref closure, _) = call.kind;
+                if let ExprKind::Path(_, ref path) = closure.kind;
                 then {
                     if ident == path.segments[0].ident {
                         span_lint(
@@ -367,80 +469,157 @@ impl EarlyLintPass for MiscEarly {
     }
 }
 
-impl MiscEarly {
-    fn check_lit(self, cx: &EarlyContext<'_>, lit: &Lit) {
-        if_chain! {
-            if let LitKind::Int(value, ..) = lit.node;
-            if let Some(src) = snippet_opt(cx, lit.span);
-            if let Some(firstch) = src.chars().next();
-            if char::to_digit(firstch, 10).is_some();
-            then {
-                let mut prev = '\0';
-                for ch in src.chars() {
-                    if ch == 'i' || ch == 'u' {
-                        if prev != '_' {
-                            span_lint(cx, UNSEPARATED_LITERAL_SUFFIX, lit.span,
-                                        "integer type suffix should be separated by an underscore");
-                        }
-                        break;
-                    }
-                    prev = ch;
+impl MiscEarlyLints {
+    fn check_lit(cx: &EarlyContext<'_>, lit: &Lit) {
+        // We test if first character in snippet is a number, because the snippet could be an expansion
+        // from a built-in macro like `line!()` or a proc-macro like `#[wasm_bindgen]`.
+        // Note that this check also covers special case that `line!()` is eagerly expanded by compiler.
+        // See <https://github.com/rust-lang/rust-clippy/issues/4507> for a regression.
+        // FIXME: Find a better way to detect those cases.
+        let lit_snip = match snippet_opt(cx, lit.span) {
+            Some(snip) if snip.chars().next().map_or(false, |c| c.is_digit(10)) => snip,
+            _ => return,
+        };
+
+        if let LitKind::Int(value, lit_int_type) = lit.kind {
+            let suffix = match lit_int_type {
+                LitIntType::Signed(ty) => ty.name_str(),
+                LitIntType::Unsigned(ty) => ty.name_str(),
+                LitIntType::Unsuffixed => "",
+            };
+
+            let maybe_last_sep_idx = if let Some(val) = lit_snip.len().checked_sub(suffix.len() + 1) {
+                val
+            } else {
+                return; // It's useless so shouldn't lint.
+            };
+            // Do not lint when literal is unsuffixed.
+            if !suffix.is_empty() && lit_snip.as_bytes()[maybe_last_sep_idx] != b'_' {
+                span_lint_and_sugg(
+                    cx,
+                    UNSEPARATED_LITERAL_SUFFIX,
+                    lit.span,
+                    "integer type suffix should be separated by an underscore",
+                    "add an underscore",
+                    format!("{}_{}", &lit_snip[..=maybe_last_sep_idx], suffix),
+                    Applicability::MachineApplicable,
+                );
+            }
+
+            if lit_snip.starts_with("0x") {
+                if maybe_last_sep_idx <= 2 {
+                    // It's meaningless or causes range error.
+                    return;
                 }
-                if src.starts_with("0x") {
-                    let mut seen = (false, false);
-                    for ch in src.chars() {
-                        match ch {
-                            'a' ..= 'f' => seen.0 = true,
-                            'A' ..= 'F' => seen.1 = true,
-                            'i' | 'u'   => break,   // start of suffix already
-                            _ => ()
-                        }
+                let mut seen = (false, false);
+                for ch in lit_snip.as_bytes()[2..=maybe_last_sep_idx].iter() {
+                    match ch {
+                        b'a'..=b'f' => seen.0 = true,
+                        b'A'..=b'F' => seen.1 = true,
+                        _ => {},
                     }
                     if seen.0 && seen.1 {
-                        span_lint(cx, MIXED_CASE_HEX_LITERALS, lit.span,
-                                    "inconsistent casing in hexadecimal literal");
-                    }
-                } else if src.starts_with("0b") || src.starts_with("0o") {
-                    /* nothing to do */
-                } else if value != 0 && src.starts_with('0') {
-                    span_lint_and_then(cx,
-                                        ZERO_PREFIXED_LITERAL,
-                                        lit.span,
-                                        "this is a decimal constant",
-                                        |db| {
-                        db.span_suggestion_with_applicability(
+                        span_lint(
+                            cx,
+                            MIXED_CASE_HEX_LITERALS,
                             lit.span,
-                            "if you mean to use a decimal constant, remove the `0` to remove confusion",
-                            src.trim_left_matches(|c| c == '_' || c == '0').to_string(),
-                            Applicability::MaybeIncorrect,
+                            "inconsistent casing in hexadecimal literal",
                         );
-                        db.span_suggestion_with_applicability(
-                            lit.span,
-                            "if you mean to use an octal constant, use `0o`",
-                            format!("0o{}", src.trim_left_matches(|c| c == '_' || c == '0')),
-                            Applicability::MaybeIncorrect,
-                        );
-                    });
-                }
-            }
-        }
-        if_chain! {
-            if let LitKind::Float(..) = lit.node;
-            if let Some(src) = snippet_opt(cx, lit.span);
-            if let Some(firstch) = src.chars().next();
-            if char::to_digit(firstch, 10).is_some();
-            then {
-                let mut prev = '\0';
-                for ch in src.chars() {
-                    if ch == 'f' {
-                        if prev != '_' {
-                            span_lint(cx, UNSEPARATED_LITERAL_SUFFIX, lit.span,
-                                        "float type suffix should be separated by an underscore");
-                        }
                         break;
                     }
-                    prev = ch;
                 }
+            } else if lit_snip.starts_with("0b") || lit_snip.starts_with("0o") {
+                /* nothing to do */
+            } else if value != 0 && lit_snip.starts_with('0') {
+                span_lint_and_then(
+                    cx,
+                    ZERO_PREFIXED_LITERAL,
+                    lit.span,
+                    "this is a decimal constant",
+                    |db| {
+                        db.span_suggestion(
+                            lit.span,
+                            "if you mean to use a decimal constant, remove the `0` to avoid confusion",
+                            lit_snip.trim_start_matches(|c| c == '_' || c == '0').to_string(),
+                            Applicability::MaybeIncorrect,
+                        );
+                        db.span_suggestion(
+                            lit.span,
+                            "if you mean to use an octal constant, use `0o`",
+                            format!("0o{}", lit_snip.trim_start_matches(|c| c == '_' || c == '0')),
+                            Applicability::MaybeIncorrect,
+                        );
+                    },
+                );
+            }
+        } else if let LitKind::Float(_, LitFloatType::Suffixed(float_ty)) = lit.kind {
+            let suffix = float_ty.name_str();
+            let maybe_last_sep_idx = if let Some(val) = lit_snip.len().checked_sub(suffix.len() + 1) {
+                val
+            } else {
+                return; // It's useless so shouldn't lint.
+            };
+            if lit_snip.as_bytes()[maybe_last_sep_idx] != b'_' {
+                span_lint_and_sugg(
+                    cx,
+                    UNSEPARATED_LITERAL_SUFFIX,
+                    lit.span,
+                    "float type suffix should be separated by an underscore",
+                    "add an underscore",
+                    format!("{}_{}", &lit_snip[..=maybe_last_sep_idx], suffix),
+                    Applicability::MachineApplicable,
+                );
+            }
+        }
+    }
+}
+
+fn check_unneeded_wildcard_pattern(cx: &EarlyContext<'_>, pat: &Pat) {
+    if let PatKind::TupleStruct(_, ref patterns) | PatKind::Tuple(ref patterns) = pat.kind {
+        fn span_lint(cx: &EarlyContext<'_>, span: Span, only_one: bool) {
+            span_lint_and_sugg(
+                cx,
+                UNNEEDED_WILDCARD_PATTERN,
+                span,
+                if only_one {
+                    "this pattern is unneeded as the `..` pattern can match that element"
+                } else {
+                    "these patterns are unneeded as the `..` pattern can match those elements"
+                },
+                if only_one { "remove it" } else { "remove them" },
+                "".to_string(),
+                Applicability::MachineApplicable,
+            );
+        }
+
+        #[allow(clippy::trivially_copy_pass_by_ref)]
+        fn is_wild<P: std::ops::Deref<Target = Pat>>(pat: &&P) -> bool {
+            if let PatKind::Wild = pat.kind {
+                true
+            } else {
+                false
+            }
+        }
+
+        if let Some(rest_index) = patterns.iter().position(|pat| pat.is_rest()) {
+            if let Some((left_index, left_pat)) = patterns[..rest_index]
+                .iter()
+                .rev()
+                .take_while(is_wild)
+                .enumerate()
+                .last()
+            {
+                span_lint(cx, left_pat.span.until(patterns[rest_index].span), left_index == 0);
+            }
+
+            if let Some((right_index, right_pat)) =
+                patterns[rest_index + 1..].iter().take_while(is_wild).enumerate().last()
+            {
+                span_lint(
+                    cx,
+                    patterns[rest_index].span.shrink_to_hi().to(right_pat.span),
+                    right_index == 0,
+                );
             }
         }
     }

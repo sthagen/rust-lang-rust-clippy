@@ -1,178 +1,228 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use matches::matches;
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::ty;
-use crate::utils::{differing_macro_contexts, match_type, paths, snippet, span_lint_and_then, walk_ptrs_ty, SpanlessEq};
 use crate::utils::sugg::Sugg;
-use crate::rustc_errors::Applicability;
+use crate::utils::{
+    differing_macro_contexts, is_type_diagnostic_item, match_type, paths, snippet_with_applicability,
+    span_lint_and_then, walk_ptrs_ty, SpanlessEq,
+};
+use if_chain::if_chain;
+use matches::matches;
+use rustc::ty;
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::Symbol;
 
-/// **What it does:** Checks for manual swapping.
-///
-/// **Why is this bad?** The `std::mem::swap` function exposes the intent better
-/// without deinitializing or copying either variable.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust,ignore
-/// let t = b;
-/// b = a;
-/// a = t;
-/// ```
-/// Use std::mem::swap():
-/// ```rust
-/// std::mem::swap(&mut a, &mut b);
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for manual swapping.
+    ///
+    /// **Why is this bad?** The `std::mem::swap` function exposes the intent better
+    /// without deinitializing or copying either variable.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let mut a = 42;
+    /// let mut b = 1337;
+    ///
+    /// let t = b;
+    /// b = a;
+    /// a = t;
+    /// ```
+    /// Use std::mem::swap():
+    /// ```rust
+    /// let mut a = 1;
+    /// let mut b = 2;
+    /// std::mem::swap(&mut a, &mut b);
+    /// ```
     pub MANUAL_SWAP,
     complexity,
     "manual swap of two variables"
 }
 
-/// **What it does:** Checks for `foo = bar; bar = foo` sequences.
-///
-/// **Why is this bad?** This looks like a failed attempt to swap.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust,ignore
-/// a = b;
-/// b = a;
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for `foo = bar; bar = foo` sequences.
+    ///
+    /// **Why is this bad?** This looks like a failed attempt to swap.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let mut a = 1;
+    /// # let mut b = 2;
+    /// a = b;
+    /// b = a;
+    /// ```
+    /// Could be written as:
+    /// ```rust
+    /// # let mut a = 1;
+    /// # let mut b = 2;
+    /// std::mem::swap(&mut a, &mut b);
+    /// ```
     pub ALMOST_SWAPPED,
     correctness,
     "`foo = bar; bar = foo` sequence"
 }
 
-#[derive(Copy, Clone)]
-pub struct Swap;
-
-impl LintPass for Swap {
-    fn get_lints(&self) -> LintArray {
-        lint_array![MANUAL_SWAP, ALMOST_SWAPPED]
-    }
-}
+declare_lint_pass!(Swap => [MANUAL_SWAP, ALMOST_SWAPPED]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Swap {
-    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx Block) {
+    fn check_block(&mut self, cx: &LateContext<'a, 'tcx>, block: &'tcx Block<'_>) {
         check_manual_swap(cx, block);
         check_suspicious_swap(cx, block);
     }
 }
 
 /// Implementation of the `MANUAL_SWAP` lint.
-fn check_manual_swap(cx: &LateContext<'_, '_>, block: &Block) {
+fn check_manual_swap(cx: &LateContext<'_, '_>, block: &Block<'_>) {
     for w in block.stmts.windows(3) {
         if_chain! {
             // let t = foo();
-            if let StmtKind::Decl(ref tmp, _) = w[0].node;
-            if let DeclKind::Local(ref tmp) = tmp.node;
+            if let StmtKind::Local(ref tmp) = w[0].kind;
             if let Some(ref tmp_init) = tmp.init;
-            if let PatKind::Binding(_, _, ident, None) = tmp.pat.node;
+            if let PatKind::Binding(.., ident, None) = tmp.pat.kind;
 
             // foo() = bar();
-            if let StmtKind::Semi(ref first, _) = w[1].node;
-            if let ExprKind::Assign(ref lhs1, ref rhs1) = first.node;
+            if let StmtKind::Semi(ref first) = w[1].kind;
+            if let ExprKind::Assign(ref lhs1, ref rhs1, _) = first.kind;
 
             // bar() = t;
-            if let StmtKind::Semi(ref second, _) = w[2].node;
-            if let ExprKind::Assign(ref lhs2, ref rhs2) = second.node;
-            if let ExprKind::Path(QPath::Resolved(None, ref rhs2)) = rhs2.node;
+            if let StmtKind::Semi(ref second) = w[2].kind;
+            if let ExprKind::Assign(ref lhs2, ref rhs2, _) = second.kind;
+            if let ExprKind::Path(QPath::Resolved(None, ref rhs2)) = rhs2.kind;
             if rhs2.segments.len() == 1;
 
             if ident.as_str() == rhs2.segments[0].ident.as_str();
             if SpanlessEq::new(cx).ignore_fn().eq_expr(tmp_init, lhs1);
             if SpanlessEq::new(cx).ignore_fn().eq_expr(rhs1, lhs2);
             then {
-                fn check_for_slice<'a>(
-                    cx: &LateContext<'_, '_>,
-                    lhs1: &'a Expr,
-                    lhs2: &'a Expr,
-                ) -> Option<(&'a Expr, &'a Expr, &'a Expr)> {
-                    if let ExprKind::Index(ref lhs1, ref idx1) = lhs1.node {
-                        if let ExprKind::Index(ref lhs2, ref idx2) = lhs2.node {
-                            if SpanlessEq::new(cx).ignore_fn().eq_expr(lhs1, lhs2) {
-                                let ty = walk_ptrs_ty(cx.tables.expr_ty(lhs1));
-
-                                if matches!(ty.sty, ty::Slice(_)) ||
-                                    matches!(ty.sty, ty::Array(_, _)) ||
-                                    match_type(cx, ty, &paths::VEC) ||
-                                    match_type(cx, ty, &paths::VEC_DEQUE) {
-                                        return Some((lhs1, idx1, idx2));
-                                }
-                            }
+                if let ExprKind::Field(ref lhs1, _) = lhs1.kind {
+                    if let ExprKind::Field(ref lhs2, _) = lhs2.kind {
+                        if lhs1.hir_id.owner_def_id() == lhs2.hir_id.owner_def_id() {
+                            return;
                         }
                     }
-
-                    None
                 }
 
-                let (replace, what, sugg) = if let Some((slice, idx1, idx2)) = check_for_slice(cx, lhs1, lhs2) {
+                let mut applicability = Applicability::MachineApplicable;
+
+                let slice = check_for_slice(cx, lhs1, lhs2);
+                let (replace, what, sugg) = if let Slice::NotSwappable = slice {
+                    return;
+                } else if let Slice::Swappable(slice, idx1, idx2) = slice {
                     if let Some(slice) = Sugg::hir_opt(cx, slice) {
-                        (false,
-                         format!(" elements of `{}`", slice),
-                         format!("{}.swap({}, {})",
-                                 slice.maybe_par(),
-                                 snippet(cx, idx1.span, ".."),
-                                 snippet(cx, idx2.span, "..")))
+                        (
+                            false,
+                            format!(" elements of `{}`", slice),
+                            format!(
+                                "{}.swap({}, {})",
+                                slice.maybe_par(),
+                                snippet_with_applicability(cx, idx1.span, "..", &mut applicability),
+                                snippet_with_applicability(cx, idx2.span, "..", &mut applicability),
+                            ),
+                        )
                     } else {
                         (false, String::new(), String::new())
                     }
                 } else if let (Some(first), Some(second)) = (Sugg::hir_opt(cx, lhs1), Sugg::hir_opt(cx, rhs1)) {
-                    (true, format!(" `{}` and `{}`", first, second),
-                        format!("std::mem::swap({}, {})", first.mut_addr(), second.mut_addr()))
+                    (
+                        true,
+                        format!(" `{}` and `{}`", first, second),
+                        format!("std::mem::swap({}, {})", first.mut_addr(), second.mut_addr()),
+                    )
                 } else {
                     (true, String::new(), String::new())
                 };
 
                 let span = w[0].span.to(second.span);
 
-                span_lint_and_then(cx,
-                                   MANUAL_SWAP,
-                                   span,
-                                   &format!("this looks like you are swapping{} manually", what),
-                                   |db| {
-                                       if !sugg.is_empty() {
-                                           db.span_suggestion_with_applicability(
-                                               span,
-                                               "try",
-                                               sugg,
-                                               Applicability::Unspecified,
-                                           );
+                span_lint_and_then(
+                    cx,
+                    MANUAL_SWAP,
+                    span,
+                    &format!("this looks like you are swapping{} manually", what),
+                    |db| {
+                        if !sugg.is_empty() {
+                            db.span_suggestion(
+                                span,
+                                "try",
+                                sugg,
+                                applicability,
+                            );
 
-                                           if replace {
-                                               db.note("or maybe you should use `std::mem::replace`?");
-                                           }
-                                       }
-                                   });
+                            if replace {
+                                db.note("or maybe you should use `std::mem::replace`?");
+                            }
+                        }
+                    }
+                );
             }
         }
     }
 }
 
+enum Slice<'a> {
+    /// `slice.swap(idx1, idx2)` can be used
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// # let mut a = vec![0, 1];
+    /// let t = a[1];
+    /// a[1] = a[0];
+    /// a[0] = t;
+    /// // can be written as
+    /// a.swap(0, 1);
+    /// ```
+    Swappable(&'a Expr<'a>, &'a Expr<'a>, &'a Expr<'a>),
+    /// The `swap` function cannot be used.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// # let mut a = [vec![1, 2], vec![3, 4]];
+    /// let t = a[0][1];
+    /// a[0][1] = a[1][0];
+    /// a[1][0] = t;
+    /// ```
+    NotSwappable,
+    /// Not a slice
+    None,
+}
+
+/// Checks if both expressions are index operations into "slice-like" types.
+fn check_for_slice<'a>(cx: &LateContext<'_, '_>, lhs1: &'a Expr<'_>, lhs2: &'a Expr<'_>) -> Slice<'a> {
+    if let ExprKind::Index(ref lhs1, ref idx1) = lhs1.kind {
+        if let ExprKind::Index(ref lhs2, ref idx2) = lhs2.kind {
+            if SpanlessEq::new(cx).ignore_fn().eq_expr(lhs1, lhs2) {
+                let ty = walk_ptrs_ty(cx.tables.expr_ty(lhs1));
+
+                if matches!(ty.kind, ty::Slice(_))
+                    || matches!(ty.kind, ty::Array(_, _))
+                    || is_type_diagnostic_item(cx, ty, Symbol::intern("vec_type"))
+                    || match_type(cx, ty, &paths::VEC_DEQUE)
+                {
+                    return Slice::Swappable(lhs1, idx1, idx2);
+                }
+            } else {
+                return Slice::NotSwappable;
+            }
+        }
+    }
+
+    Slice::None
+}
+
 /// Implementation of the `ALMOST_SWAPPED` lint.
-fn check_suspicious_swap(cx: &LateContext<'_, '_>, block: &Block) {
+fn check_suspicious_swap(cx: &LateContext<'_, '_>, block: &Block<'_>) {
     for w in block.stmts.windows(2) {
         if_chain! {
-            if let StmtKind::Semi(ref first, _) = w[0].node;
-            if let StmtKind::Semi(ref second, _) = w[1].node;
+            if let StmtKind::Semi(ref first) = w[0].kind;
+            if let StmtKind::Semi(ref second) = w[1].kind;
             if !differing_macro_contexts(first.span, second.span);
-            if let ExprKind::Assign(ref lhs0, ref rhs0) = first.node;
-            if let ExprKind::Assign(ref lhs1, ref rhs1) = second.node;
+            if let ExprKind::Assign(ref lhs0, ref rhs0, _) = first.kind;
+            if let ExprKind::Assign(ref lhs1, ref rhs1, _) = second.kind;
             if SpanlessEq::new(cx).ignore_fn().eq_expr(lhs0, rhs1);
             if SpanlessEq::new(cx).ignore_fn().eq_expr(lhs1, rhs0);
             then {
@@ -196,7 +246,7 @@ fn check_suspicious_swap(cx: &LateContext<'_, '_>, block: &Block) {
                                    &format!("this looks like you are trying to swap{}", what),
                                    |db| {
                                        if !what.is_empty() {
-                                           db.span_suggestion_with_applicability(
+                                           db.span_suggestion(
                                                span,
                                                "try",
                                                format!(

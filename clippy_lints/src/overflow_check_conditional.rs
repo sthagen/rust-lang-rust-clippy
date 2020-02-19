@@ -1,55 +1,40 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::hir::*;
 use crate::utils::{span_lint, SpanlessEq};
+use if_chain::if_chain;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Detects classic underflow/overflow checks.
-///
-/// **Why is this bad?** Most classic C underflow/overflow checks will fail in
-/// Rust. Users can use functions like `overflowing_*` and `wrapping_*` instead.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// a + b < a
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Detects classic underflow/overflow checks.
+    ///
+    /// **Why is this bad?** Most classic C underflow/overflow checks will fail in
+    /// Rust. Users can use functions like `overflowing_*` and `wrapping_*` instead.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let a = 1;
+    /// # let b = 2;
+    /// a + b < a;
+    /// ```
     pub OVERFLOW_CHECK_CONDITIONAL,
     complexity,
     "overflow checks inspired by C which are likely to panic"
 }
 
-#[derive(Copy, Clone)]
-pub struct OverflowCheckConditional;
-
-impl LintPass for OverflowCheckConditional {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(OVERFLOW_CHECK_CONDITIONAL)
-    }
-}
+declare_lint_pass!(OverflowCheckConditional => [OVERFLOW_CHECK_CONDITIONAL]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for OverflowCheckConditional {
     // a + b < a, a > a + b, a < a - b, a - b > a
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
         let eq = |l, r| SpanlessEq::new(cx).eq_path_segment(l, r);
         if_chain! {
-            if let ExprKind::Binary(ref op, ref first, ref second) = expr.node;
-            if let ExprKind::Binary(ref op2, ref ident1, ref ident2) = first.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path1)) = ident1.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path2)) = ident2.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path3)) = second.node;
+            if let ExprKind::Binary(ref op, ref first, ref second) = expr.kind;
+            if let ExprKind::Binary(ref op2, ref ident1, ref ident2) = first.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path1)) = ident1.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path2)) = ident2.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path3)) = second.kind;
             if eq(&path1.segments[0], &path3.segments[0]) || eq(&path2.segments[0], &path3.segments[0]);
             if cx.tables.expr_ty(ident1).is_integral();
             if cx.tables.expr_ty(ident2).is_integral();
@@ -70,11 +55,11 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for OverflowCheckConditional {
         }
 
         if_chain! {
-            if let ExprKind::Binary(ref op, ref first, ref second) = expr.node;
-            if let ExprKind::Binary(ref op2, ref ident1, ref ident2) = second.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path1)) = ident1.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path2)) = ident2.node;
-            if let ExprKind::Path(QPath::Resolved(_, ref path3)) = first.node;
+            if let ExprKind::Binary(ref op, ref first, ref second) = expr.kind;
+            if let ExprKind::Binary(ref op2, ref ident1, ref ident2) = second.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path1)) = ident1.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path2)) = ident2.kind;
+            if let ExprKind::Path(QPath::Resolved(_, ref path3)) = first.kind;
             if eq(&path1.segments[0], &path3.segments[0]) || eq(&path2.segments[0], &path3.segments[0]);
             if cx.tables.expr_ty(ident1).is_integral();
             if cx.tables.expr_ty(ident2).is_integral();

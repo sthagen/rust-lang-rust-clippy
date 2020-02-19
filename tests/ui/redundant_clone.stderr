@@ -1,111 +1,159 @@
 error: redundant clone
-  --> $DIR/redundant_clone.rs:16:41
+  --> $DIR/redundant_clone.rs:8:42
    |
-16 |     let _ = ["lorem", "ipsum"].join(" ").to_string();
-   |                                         ^^^^^^^^^^^^ help: remove this
+LL |     let _s = ["lorem", "ipsum"].join(" ").to_string();
+   |                                          ^^^^^^^^^^^^ help: remove this
    |
    = note: `-D clippy::redundant-clone` implied by `-D warnings`
 note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:16:13
+  --> $DIR/redundant_clone.rs:8:14
    |
-16 |     let _ = ["lorem", "ipsum"].join(" ").to_string();
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     let _s = ["lorem", "ipsum"].join(" ").to_string();
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: redundant clone
+  --> $DIR/redundant_clone.rs:11:15
+   |
+LL |     let _s = s.clone();
+   |               ^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:11:14
+   |
+LL |     let _s = s.clone();
+   |              ^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:14:15
+   |
+LL |     let _s = s.to_string();
+   |               ^^^^^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:14:14
+   |
+LL |     let _s = s.to_string();
+   |              ^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:17:15
+   |
+LL |     let _s = s.to_owned();
+   |               ^^^^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:17:14
+   |
+LL |     let _s = s.to_owned();
+   |              ^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:19:42
+   |
+LL |     let _s = Path::new("/a/b/").join("c").to_owned();
+   |                                          ^^^^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
   --> $DIR/redundant_clone.rs:19:14
    |
-19 |     let _ = s.clone();
-   |              ^^^^^^^^ help: remove this
-   |
-note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:19:13
-   |
-19 |     let _ = s.clone();
-   |             ^
+LL |     let _s = Path::new("/a/b/").join("c").to_owned();
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: redundant clone
-  --> $DIR/redundant_clone.rs:22:14
+  --> $DIR/redundant_clone.rs:21:42
    |
-22 |     let _ = s.to_string();
-   |              ^^^^^^^^^^^^ help: remove this
+LL |     let _s = Path::new("/a/b/").join("c").to_path_buf();
+   |                                          ^^^^^^^^^^^^^^ help: remove this
    |
 note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:22:13
+  --> $DIR/redundant_clone.rs:21:14
    |
-22 |     let _ = s.to_string();
-   |             ^
+LL |     let _s = Path::new("/a/b/").join("c").to_path_buf();
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: redundant clone
+  --> $DIR/redundant_clone.rs:23:29
+   |
+LL |     let _s = OsString::new().to_owned();
+   |                             ^^^^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:23:14
+   |
+LL |     let _s = OsString::new().to_owned();
+   |              ^^^^^^^^^^^^^^^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:25:29
+   |
+LL |     let _s = OsString::new().to_os_string();
+   |                             ^^^^^^^^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
   --> $DIR/redundant_clone.rs:25:14
    |
-25 |     let _ = s.to_owned();
-   |              ^^^^^^^^^^^ help: remove this
-   |
-note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:25:13
-   |
-25 |     let _ = s.to_owned();
-   |             ^
+LL |     let _s = OsString::new().to_os_string();
+   |              ^^^^^^^^^^^^^^^
 
 error: redundant clone
-  --> $DIR/redundant_clone.rs:27:41
+  --> $DIR/redundant_clone.rs:32:19
    |
-27 |     let _ = Path::new("/a/b/").join("c").to_owned();
-   |                                         ^^^^^^^^^^^ help: remove this
-   |
-note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:27:13
-   |
-27 |     let _ = Path::new("/a/b/").join("c").to_owned();
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-error: redundant clone
-  --> $DIR/redundant_clone.rs:29:41
-   |
-29 |     let _ = Path::new("/a/b/").join("c").to_path_buf();
-   |                                         ^^^^^^^^^^^^^^ help: remove this
+LL |     let _t = tup.0.clone();
+   |                   ^^^^^^^^ help: remove this
    |
 note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:29:13
+  --> $DIR/redundant_clone.rs:32:14
    |
-29 |     let _ = Path::new("/a/b/").join("c").to_path_buf();
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     let _t = tup.0.clone();
+   |              ^^^^^
 
 error: redundant clone
-  --> $DIR/redundant_clone.rs:31:28
+  --> $DIR/redundant_clone.rs:59:22
    |
-31 |     let _ = OsString::new().to_owned();
-   |                            ^^^^^^^^^^^ help: remove this
-   |
-note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:31:13
-   |
-31 |     let _ = OsString::new().to_owned();
-   |             ^^^^^^^^^^^^^^^
-
-error: redundant clone
-  --> $DIR/redundant_clone.rs:33:28
-   |
-33 |     let _ = OsString::new().to_os_string();
-   |                            ^^^^^^^^^^^^^^^ help: remove this
-   |
-note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:33:13
-   |
-33 |     let _ = OsString::new().to_os_string();
-   |             ^^^^^^^^^^^^^^^
-
-error: redundant clone
-  --> $DIR/redundant_clone.rs:43:22
-   |
-43 |         (a.clone(), a.clone())
+LL |         (a.clone(), a.clone())
    |                      ^^^^^^^^ help: remove this
    |
 note: this value is dropped without further use
-  --> $DIR/redundant_clone.rs:43:21
+  --> $DIR/redundant_clone.rs:59:21
    |
-43 |         (a.clone(), a.clone())
+LL |         (a.clone(), a.clone())
    |                     ^
 
-error: aborting due to 9 previous errors
+error: redundant clone
+  --> $DIR/redundant_clone.rs:119:15
+   |
+LL |     let _s = s.clone();
+   |               ^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:119:14
+   |
+LL |     let _s = s.clone();
+   |              ^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:120:15
+   |
+LL |     let _t = t.clone();
+   |               ^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:120:14
+   |
+LL |     let _t = t.clone();
+   |              ^
+
+error: redundant clone
+  --> $DIR/redundant_clone.rs:130:19
+   |
+LL |         let _f = f.clone();
+   |                   ^^^^^^^^ help: remove this
+   |
+note: this value is dropped without further use
+  --> $DIR/redundant_clone.rs:130:18
+   |
+LL |         let _f = f.clone();
+   |                  ^
+
+error: aborting due to 13 previous errors
 

@@ -1,47 +1,34 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc::hir::*;
 use crate::utils::{get_trait_def_id, paths, span_lint};
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for mis-uses of the serde API.
-///
-/// **Why is this bad?** Serde is very finnicky about how its API should be
-/// used, but the type system can't be used to enforce it (yet?).
-///
-/// **Known problems:** None.
-///
-/// **Example:** Implementing `Visitor::visit_string` but not
-/// `Visitor::visit_str`.
 declare_clippy_lint! {
+    /// **What it does:** Checks for mis-uses of the serde API.
+    ///
+    /// **Why is this bad?** Serde is very finnicky about how its API should be
+    /// used, but the type system can't be used to enforce it (yet?).
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:** Implementing `Visitor::visit_string` but not
+    /// `Visitor::visit_str`.
     pub SERDE_API_MISUSE,
     correctness,
     "various things that will negatively affect your serde experience"
 }
 
+declare_lint_pass!(SerdeAPI => [SERDE_API_MISUSE]);
 
-#[derive(Copy, Clone)]
-pub struct Serde;
-
-impl LintPass for Serde {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(SERDE_API_MISUSE)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Serde {
-    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item) {
-        if let ItemKind::Impl(_, _, _, _, Some(ref trait_ref), _, ref items) = item.node {
-            let did = trait_ref.path.def.def_id();
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for SerdeAPI {
+    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item<'_>) {
+        if let ItemKind::Impl {
+            of_trait: Some(ref trait_ref),
+            items,
+            ..
+        } = item.kind
+        {
+            let did = trait_ref.path.res.def_id();
             if let Some(visit_did) = get_trait_def_id(cx, &paths::SERDE_DE_VISITOR) {
                 if did == visit_did {
                     let mut seen_str = None;

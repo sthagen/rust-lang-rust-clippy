@@ -1,171 +1,40 @@
-error: binding's name is too similar to existing binding
+error: consider choosing a more descriptive name
+  --> $DIR/non_expressive_names.rs:27:9
+   |
+LL |     let _1 = 1; //~ERROR Consider a more descriptive name
+   |         ^^
+   |
+   = note: `-D clippy::just-underscores-and-digits` implied by `-D warnings`
+
+error: consider choosing a more descriptive name
   --> $DIR/non_expressive_names.rs:28:9
    |
-28 |     let bpple: i32;
-   |         ^^^^^
-   |
-   = note: `-D clippy::similar-names` implied by `-D warnings`
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:26:9
-   |
-26 |     let apple: i32;
-   |         ^^^^^
-help: separate the discriminating character by an underscore like: `b_pple`
-  --> $DIR/non_expressive_names.rs:28:9
-   |
-28 |     let bpple: i32;
+LL |     let ____1 = 1; //~ERROR Consider a more descriptive name
    |         ^^^^^
 
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:30:9
+error: consider choosing a more descriptive name
+  --> $DIR/non_expressive_names.rs:29:9
    |
-30 |     let cpple: i32;
-   |         ^^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:26:9
-   |
-26 |     let apple: i32;
-   |         ^^^^^
-help: separate the discriminating character by an underscore like: `c_pple`
-  --> $DIR/non_expressive_names.rs:30:9
-   |
-30 |     let cpple: i32;
-   |         ^^^^^
-
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:55:9
-   |
-55 |     let bluby: i32;
-   |         ^^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:54:9
-   |
-54 |     let blubx: i32;
-   |         ^^^^^
-help: separate the discriminating character by an underscore like: `blub_y`
-  --> $DIR/non_expressive_names.rs:55:9
-   |
-55 |     let bluby: i32;
-   |         ^^^^^
-
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:60:9
-   |
-60 |     let coke: i32;
-   |         ^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:58:9
-   |
-58 |     let cake: i32;
-   |         ^^^^
-
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:78:9
-   |
-78 |     let xyzeabc: i32;
-   |         ^^^^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:76:9
-   |
-76 |     let xyz1abc: i32;
+LL |     let __1___2 = 12; //~ERROR Consider a more descriptive name
    |         ^^^^^^^
 
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:82:9
+error: consider choosing a more descriptive name
+  --> $DIR/non_expressive_names.rs:49:13
    |
-82 |     let parsee: i32;
-   |         ^^^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:80:9
-   |
-80 |     let parser: i32;
-   |         ^^^^^^
-help: separate the discriminating character by an underscore like: `parse_e`
-  --> $DIR/non_expressive_names.rs:82:9
-   |
-82 |     let parsee: i32;
-   |         ^^^^^^
-
-error: binding's name is too similar to existing binding
-  --> $DIR/non_expressive_names.rs:96:16
-   |
-96 |         bpple: sprang } = unimplemented!();
-   |                ^^^^^^
-   |
-note: existing binding defined here
-  --> $DIR/non_expressive_names.rs:95:22
-   |
-95 |     let Foo { apple: spring,
-   |                      ^^^^^^
-
-error: 5th binding whose name is just one char
-   --> $DIR/non_expressive_names.rs:130:17
-    |
-130 |             let e: i32;
-    |                 ^
-    |
-    = note: `-D clippy::many-single-char-names` implied by `-D warnings`
-
-error: 5th binding whose name is just one char
-   --> $DIR/non_expressive_names.rs:133:17
-    |
-133 |             let e: i32;
-    |                 ^
-
-error: 6th binding whose name is just one char
-   --> $DIR/non_expressive_names.rs:134:17
-    |
-134 |             let f: i32;
-    |                 ^
-
-error: 5th binding whose name is just one char
-   --> $DIR/non_expressive_names.rs:139:13
-    |
-139 |             e => panic!(),
-    |             ^
+LL |         let _1 = 1;
+   |             ^^
 
 error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:149:9
-    |
-149 |     let _1 = 1; //~ERROR Consider a more descriptive name
-    |         ^^
-    |
-    = note: `-D clippy::just-underscores-and-digits` implied by `-D warnings`
+  --> $DIR/non_expressive_names.rs:50:13
+   |
+LL |         let ____1 = 1;
+   |             ^^^^^
 
 error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:150:9
-    |
-150 |     let ____1 = 1; //~ERROR Consider a more descriptive name
-    |         ^^^^^
+  --> $DIR/non_expressive_names.rs:51:13
+   |
+LL |         let __1___2 = 12;
+   |             ^^^^^^^
 
-error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:151:9
-    |
-151 |     let __1___2 = 12; //~ERROR Consider a more descriptive name
-    |         ^^^^^^^
-
-error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:171:13
-    |
-171 |         let _1 = 1;
-    |             ^^
-
-error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:172:13
-    |
-172 |         let ____1 = 1;
-    |             ^^^^^
-
-error: consider choosing a more descriptive name
-   --> $DIR/non_expressive_names.rs:173:13
-    |
-173 |         let __1___2 = 12;
-    |             ^^^^^^^
-
-error: aborting due to 17 previous errors
+error: aborting due to 6 previous errors
 

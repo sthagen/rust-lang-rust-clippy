@@ -1,37 +1,12 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
+// run-rustfix
 #![feature(integer_atomics)]
-#![allow(clippy::blacklisted_name)]
+#![allow(unused_variables, clippy::blacklisted_name)]
 #![deny(clippy::replace_consts)]
 
 use std::sync::atomic::*;
-use std::sync::{ONCE_INIT, Once};
 
+#[rustfmt::skip]
 fn bad() {
-    // Once
-    { let foo = ONCE_INIT; };
-    // Atomic
-    { let foo = ATOMIC_BOOL_INIT; };
-    { let foo = ATOMIC_ISIZE_INIT; };
-    { let foo = ATOMIC_I8_INIT; };
-    { let foo = ATOMIC_I16_INIT; };
-    { let foo = ATOMIC_I32_INIT; };
-    { let foo = ATOMIC_I64_INIT; };
-    { let foo = ATOMIC_USIZE_INIT; };
-    { let foo = ATOMIC_U8_INIT; };
-    { let foo = ATOMIC_U16_INIT; };
-    { let foo = ATOMIC_U32_INIT; };
-    { let foo = ATOMIC_U64_INIT; };
     // Min
     { let foo = std::isize::MIN; };
     { let foo = std::i8::MIN; };
@@ -60,9 +35,8 @@ fn bad() {
     { let foo = std::u128::MAX; };
 }
 
+#[rustfmt::skip]
 fn good() {
-    // Once
-    { let foo = Once::new(); };
     // Atomic
     { let foo = AtomicBool::new(false); };
     { let foo = AtomicIsize::new(0); };
@@ -101,6 +75,22 @@ fn good() {
     { let foo = u32::max_value(); };
     { let foo = u64::max_value(); };
     { let foo = u128::max_value(); };
+
+    let x = 42;
+
+    let _ = match x {
+        std::i8::MIN => -1,
+        1..=std::i8::MAX => 1,
+        _ => 0
+    };
+
+    let _ = if let std::i8::MIN = x {
+        -1
+    } else if let 1..=std::i8::MAX = x {
+        1
+    } else {
+        0
+    };
 }
 
 fn main() {

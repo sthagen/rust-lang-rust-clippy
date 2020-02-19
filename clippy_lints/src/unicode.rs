@@ -1,90 +1,75 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::rustc::hir::*;
-use crate::syntax::ast::{LitKind, NodeId};
-use crate::syntax::source_map::Span;
+use crate::utils::{is_allowed, snippet, span_lint_and_sugg};
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
+use syntax::ast::LitKind;
 use unicode_normalization::UnicodeNormalization;
-use crate::utils::{is_allowed, snippet, span_help_and_lint};
 
-/// **What it does:** Checks for the Unicode zero-width space in the code.
-///
-/// **Why is this bad?** Having an invisible character in the code makes for all
-/// sorts of April fools, but otherwise is very much frowned upon.
-///
-/// **Known problems:** None.
-///
-/// **Example:** You don't see it, but there may be a zero-width space
-/// somewhere in this text.
 declare_clippy_lint! {
+    /// **What it does:** Checks for the Unicode zero-width space in the code.
+    ///
+    /// **Why is this bad?** Having an invisible character in the code makes for all
+    /// sorts of April fools, but otherwise is very much frowned upon.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:** You don't see it, but there may be a zero-width space
+    /// somewhere in this text.
     pub ZERO_WIDTH_SPACE,
     correctness,
     "using a zero-width space in a string literal, which is confusing"
 }
 
-/// **What it does:** Checks for non-ASCII characters in string literals.
-///
-/// **Why is this bad?** Yeah, we know, the 90's called and wanted their charset
-/// back. Even so, there still are editors and other programs out there that
-/// don't work well with Unicode. So if the code is meant to be used
-/// internationally, on multiple operating systems, or has other portability
-/// requirements, activating this lint could be useful.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// let x = "Hä?"
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for non-ASCII characters in string literals.
+    ///
+    /// **Why is this bad?** Yeah, we know, the 90's called and wanted their charset
+    /// back. Even so, there still are editors and other programs out there that
+    /// don't work well with Unicode. So if the code is meant to be used
+    /// internationally, on multiple operating systems, or has other portability
+    /// requirements, activating this lint could be useful.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let x = String::from("€");
+    /// ```
+    /// Could be written as:
+    /// ```rust
+    /// let x = String::from("\u{20ac}");
+    /// ```
     pub NON_ASCII_LITERAL,
     pedantic,
-    "using any literal non-ASCII chars in a string literal instead of \
-     using the `\\u` escape"
+    "using any literal non-ASCII chars in a string literal instead of using the `\\u` escape"
 }
 
-/// **What it does:** Checks for string literals that contain Unicode in a form
-/// that is not equal to its
-/// [NFC-recomposition](http://www.unicode.org/reports/tr15/#Norm_Forms).
-///
-/// **Why is this bad?** If such a string is compared to another, the results
-/// may be surprising.
-///
-/// **Known problems** None.
-///
-/// **Example:** You may not see it, but “à” and “à” aren't the same string. The
-/// former when escaped is actually `"a\u{300}"` while the latter is `"\u{e0}"`.
 declare_clippy_lint! {
+    /// **What it does:** Checks for string literals that contain Unicode in a form
+    /// that is not equal to its
+    /// [NFC-recomposition](http://www.unicode.org/reports/tr15/#Norm_Forms).
+    ///
+    /// **Why is this bad?** If such a string is compared to another, the results
+    /// may be surprising.
+    ///
+    /// **Known problems** None.
+    ///
+    /// **Example:** You may not see it, but "à"" and "à"" aren't the same string. The
+    /// former when escaped is actually `"a\u{300}"` while the latter is `"\u{e0}"`.
     pub UNICODE_NOT_NFC,
     pedantic,
-    "using a unicode literal not in NFC normal form (see \
-     [unicode tr15](http://www.unicode.org/reports/tr15/) for further information)"
+    "using a Unicode literal not in NFC normal form (see [Unicode tr15](http://www.unicode.org/reports/tr15/) for further information)"
 }
 
+declare_lint_pass!(Unicode => [ZERO_WIDTH_SPACE, NON_ASCII_LITERAL, UNICODE_NOT_NFC]);
 
-#[derive(Copy, Clone)]
-pub struct Unicode;
-
-impl LintPass for Unicode {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(ZERO_WIDTH_SPACE, NON_ASCII_LITERAL, UNICODE_NOT_NFC)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Unicode {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
-        if let ExprKind::Lit(ref lit) = expr.node {
+impl LateLintPass<'_, '_> for Unicode {
+    fn check_expr(&mut self, cx: &LateContext<'_, '_>, expr: &'_ Expr<'_>) {
+        if let ExprKind::Lit(ref lit) = expr.kind {
             if let LitKind::Str(_, _) = lit.node {
-                check_str(cx, lit.span, expr.id)
+                check_str(cx, lit.span, expr.hir_id)
             }
         }
     }
@@ -104,43 +89,43 @@ fn escape<T: Iterator<Item = char>>(s: T) -> String {
     result
 }
 
-fn check_str(cx: &LateContext<'_, '_>, span: Span, id: NodeId) {
+fn check_str(cx: &LateContext<'_, '_>, span: Span, id: HirId) {
     let string = snippet(cx, span, "");
     if string.contains('\u{200B}') {
-        span_help_and_lint(
+        span_lint_and_sugg(
             cx,
             ZERO_WIDTH_SPACE,
             span,
             "zero-width space detected",
-            &format!(
-                "Consider replacing the string with:\n\"{}\"",
-                string.replace("\u{200B}", "\\u{200B}")
-            ),
+            "consider replacing the string with",
+            string.replace("\u{200B}", "\\u{200B}"),
+            Applicability::MachineApplicable,
         );
     }
     if string.chars().any(|c| c as u32 > 0x7F) {
-        span_help_and_lint(
+        span_lint_and_sugg(
             cx,
             NON_ASCII_LITERAL,
             span,
             "literal non-ASCII character detected",
-            &format!(
-                "Consider replacing the string with:\n\"{}\"",
-                if is_allowed(cx, UNICODE_NOT_NFC, id) {
-                    escape(string.chars())
-                } else {
-                    escape(string.nfc())
-                }
-            ),
+            "consider replacing the string with",
+            if is_allowed(cx, UNICODE_NOT_NFC, id) {
+                escape(string.chars())
+            } else {
+                escape(string.nfc())
+            },
+            Applicability::MachineApplicable,
         );
     }
     if is_allowed(cx, NON_ASCII_LITERAL, id) && string.chars().zip(string.nfc()).any(|(a, b)| a != b) {
-        span_help_and_lint(
+        span_lint_and_sugg(
             cx,
             UNICODE_NOT_NFC,
             span,
-            "non-nfc unicode sequence detected",
-            &format!("Consider replacing the string with:\n\"{}\"", string.nfc().collect::<String>()),
+            "non-NFC Unicode sequence detected",
+            "consider replacing the string with",
+            string.nfc().collect::<String>(),
+            Applicability::MachineApplicable,
         );
     }
 }

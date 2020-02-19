@@ -1,82 +1,120 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
+use crate::utils::{is_direct_expn_of, is_expn_of, match_function_call, paths, span_lint};
 use if_chain::if_chain;
-use crate::syntax::ast::LitKind;
-use crate::syntax::ptr::P;
-use crate::syntax::ext::quote::rt::Span;
-use crate::utils::{is_direct_expn_of, is_expn_of, match_def_path, opt_def_id, paths, resolve_node, span_lint};
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::Span;
+use syntax::ast::LitKind;
 
-/// **What it does:** Checks for missing parameters in `panic!`.
-///
-/// **Why is this bad?** Contrary to the `format!` family of macros, there are
-/// two forms of `panic!`: if there are no parameters given, the first argument
-/// is not a format string and used literally. So while `format!("{}")` will
-/// fail to compile, `panic!("{}")` will not.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// panic!("This `panic!` is probably missing a parameter there: {}");
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for missing parameters in `panic!`.
+    ///
+    /// **Why is this bad?** Contrary to the `format!` family of macros, there are
+    /// two forms of `panic!`: if there are no parameters given, the first argument
+    /// is not a format string and used literally. So while `format!("{}")` will
+    /// fail to compile, `panic!("{}")` will not.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```no_run
+    /// panic!("This `panic!` is probably missing a parameter there: {}");
+    /// ```
     pub PANIC_PARAMS,
     style,
     "missing parameters in `panic!` calls"
 }
 
-/// **What it does:** Checks for usage of `unimplemented!`.
-///
-/// **Why is this bad?** This macro should not be present in production code
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// unimplemented!();
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `panic!`.
+    ///
+    /// **Why is this bad?** `panic!` will stop the execution of the executable
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```no_run
+    /// panic!("even with a good reason");
+    /// ```
+    pub PANIC,
+    restriction,
+    "usage of the `panic!` macro"
+}
+
+declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `unimplemented!`.
+    ///
+    /// **Why is this bad?** This macro should not be present in production code
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```no_run
+    /// unimplemented!();
+    /// ```
     pub UNIMPLEMENTED,
     restriction,
     "`unimplemented!` should not be present in production code"
 }
 
-#[allow(missing_copy_implementations)]
-pub struct Pass;
-
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(PANIC_PARAMS, UNIMPLEMENTED)
-    }
+declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `todo!`.
+    ///
+    /// **Why is this bad?** This macro should not be present in production code
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```no_run
+    /// todo!();
+    /// ```
+    pub TODO,
+    restriction,
+    "`todo!` should not be present in production code"
 }
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
+declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `unreachable!`.
+    ///
+    /// **Why is this bad?** This macro can cause code to panic
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```no_run
+    /// unreachable!();
+    /// ```
+    pub UNREACHABLE,
+    restriction,
+    "`unreachable!` should not be present in production code"
+}
+
+declare_lint_pass!(PanicUnimplemented => [PANIC_PARAMS, UNIMPLEMENTED, UNREACHABLE, TODO, PANIC]);
+
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for PanicUnimplemented {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
         if_chain! {
-            if let ExprKind::Block(ref block, _) = expr.node;
+            if let ExprKind::Block(ref block, _) = expr.kind;
             if let Some(ref ex) = block.expr;
-            if let ExprKind::Call(ref fun, ref params) = ex.node;
-            if let ExprKind::Path(ref qpath) = fun.node;
-            if let Some(fun_def_id) = opt_def_id(resolve_node(cx, qpath, fun.hir_id));
-            if match_def_path(cx.tcx, fun_def_id, &paths::BEGIN_PANIC);
-            if params.len() == 2;
+            if let Some(params) = match_function_call(cx, ex, &paths::BEGIN_PANIC);
+            if params.len() == 1;
             then {
                 if is_expn_of(expr.span, "unimplemented").is_some() {
                     let span = get_outer_span(expr);
                     span_lint(cx, UNIMPLEMENTED, span,
                               "`unimplemented` should not be present in production code");
-                } else {
+                } else if is_expn_of(expr.span, "todo").is_some() {
+                    let span = get_outer_span(expr);
+                    span_lint(cx, TODO, span,
+                              "`todo` should not be present in production code");
+                } else if is_expn_of(expr.span, "unreachable").is_some() {
+                    let span = get_outer_span(expr);
+                    span_lint(cx, UNREACHABLE, span,
+                              "`unreachable` should not be present in production code");
+                } else if is_expn_of(expr.span, "panic").is_some() {
+                    let span = get_outer_span(expr);
+                    span_lint(cx, PANIC, span,
+                              "`panic` should not be present in production code");
                     match_panic(params, expr, cx);
                 }
             }
@@ -84,10 +122,12 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
     }
 }
 
-fn get_outer_span(expr: &Expr) -> Span {
+fn get_outer_span(expr: &Expr<'_>) -> Span {
     if_chain! {
-        if let Some(first) = expr.span.ctxt().outer().expn_info();
-        if let Some(second) = first.call_site.ctxt().outer().expn_info();
+        if expr.span.from_expansion();
+        let first = expr.span.ctxt().outer_expn_data();
+        if first.call_site.from_expansion();
+        let second = first.call_site.ctxt().outer_expn_data();
         then {
             second.call_site
         } else {
@@ -96,9 +136,9 @@ fn get_outer_span(expr: &Expr) -> Span {
     }
 }
 
-fn match_panic(params: &P<[Expr]>, expr: &Expr, cx: &LateContext<'_, '_>) {
+fn match_panic(params: &[Expr<'_>], expr: &Expr<'_>, cx: &LateContext<'_, '_>) {
     if_chain! {
-        if let ExprKind::Lit(ref lit) = params[0].node;
+        if let ExprKind::Lit(ref lit) = params[0].kind;
         if is_direct_expn_of(expr.span, "panic").is_some();
         if let LitKind::Str(ref string, _) = lit.node;
         let string = string.as_str().replace("{{", "").replace("}}", "");

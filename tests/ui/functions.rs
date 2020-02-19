@@ -1,28 +1,44 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #![warn(clippy::all)]
 #![allow(dead_code)]
-#![allow(unused_unsafe)]
+#![allow(unused_unsafe, clippy::missing_safety_doc)]
 
 // TOO_MANY_ARGUMENTS
 fn good(_one: u32, _two: u32, _three: &str, _four: bool, _five: f32, _six: f32, _seven: bool) {}
 
-fn bad(_one: u32, _two: u32, _three: &str, _four: bool, _five: f32, _six: f32, _seven: bool, _eight: ()) {
+fn bad(_one: u32, _two: u32, _three: &str, _four: bool, _five: f32, _six: f32, _seven: bool, _eight: ()) {}
+
+#[rustfmt::skip]
+fn bad_multiline(
+    one: u32,
+    two: u32,
+    three: &str,
+    four: bool,
+    five: f32,
+    six: f32,
+    seven: bool,
+    eight: ()
+) {
+    let _one = one;
+    let _two = two;
+    let _three = three;
+    let _four = four;
+    let _five = five;
+    let _six = six;
+    let _seven = seven;
 }
 
 // don't lint extern fns
-extern fn extern_fn(_one: u32, _two: u32, _three: &str, _four: bool, _five: f32, _six: f32, _seven: bool, _eight: ()) {}
+extern "C" fn extern_fn(
+    _one: u32,
+    _two: u32,
+    _three: *const u8,
+    _four: bool,
+    _five: f32,
+    _six: f32,
+    _seven: bool,
+    _eight: *const std::ffi::c_void,
+) {
+}
 
 pub trait Foo {
     fn good(_one: u32, _two: u32, _three: &str, _four: bool, _five: f32, _six: f32, _seven: bool);

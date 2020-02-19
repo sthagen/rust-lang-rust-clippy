@@ -1,17 +1,14 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// run-rustfix
 
-
-
-
-
+#![allow(unused, clippy::needless_bool, clippy::match_bool)]
+#![allow(clippy::if_same_then_else, clippy::single_match)]
 #![warn(clippy::needless_return)]
+
+macro_rules! the_answer {
+    () => {
+        42
+    };
+}
 
 fn test_end_of_fn() -> bool {
     if true {
@@ -22,7 +19,7 @@ fn test_end_of_fn() -> bool {
 }
 
 fn test_no_semicolon() -> bool {
-    return true
+    return true;
 }
 
 fn test_if_block() -> bool {
@@ -38,7 +35,7 @@ fn test_match(x: bool) -> bool {
         true => return false,
         false => {
             return true;
-        }
+        },
     }
 }
 
@@ -47,6 +44,29 @@ fn test_closure() {
         return true;
     };
     let _ = || return true;
+}
+
+fn test_macro_call() -> i32 {
+    return the_answer!();
+}
+
+fn test_void_fun() {
+    return;
+}
+
+fn test_void_if_fun(b: bool) {
+    if b {
+        return;
+    } else {
+        return;
+    }
+}
+
+fn test_void_match(x: u32) {
+    match x {
+        0 => (),
+        _ => return,
+    }
 }
 
 fn main() {

@@ -1,72 +1,68 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+use crate::utils::{
+    implements_trait, in_macro, is_copy, multispan_sugg, snippet, span_lint, span_lint_and_then, SpanlessEq,
+};
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::utils::{in_macro, implements_trait, is_copy, multispan_sugg, snippet, span_lint, span_lint_and_then, SpanlessEq};
-use crate::rustc_errors::Applicability;
-
-/// **What it does:** Checks for equal operands to comparison, logical and
-/// bitwise, difference and division binary operators (`==`, `>`, etc., `&&`,
-/// `||`, `&`, `|`, `^`, `-` and `/`).
-///
-/// **Why is this bad?** This is usually just a typo or a copy and paste error.
-///
-/// **Known problems:** False negatives: We had some false positives regarding
-/// calls (notably [racer](https://github.com/phildawes/racer) had one instance
-/// of `x.pop() && x.pop()`), so we removed matching any function or method
-/// calls. We may introduce a whitelist of known pure functions in the future.
-///
-/// **Example:**
-/// ```rust
-/// x + 1 == x + 1
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for equal operands to comparison, logical and
+    /// bitwise, difference and division binary operators (`==`, `>`, etc., `&&`,
+    /// `||`, `&`, `|`, `^`, `-` and `/`).
+    ///
+    /// **Why is this bad?** This is usually just a typo or a copy and paste error.
+    ///
+    /// **Known problems:** False negatives: We had some false positives regarding
+    /// calls (notably [racer](https://github.com/phildawes/racer) had one instance
+    /// of `x.pop() && x.pop()`), so we removed matching any function or method
+    /// calls. We may introduce a whitelist of known pure functions in the future.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// # let x = 1;
+    /// if x + 1 == x + 1 {}
+    /// ```
     pub EQ_OP,
     correctness,
-    "equal operands on both sides of a comparison or bitwise combination (e.g. `x == x`)"
+    "equal operands on both sides of a comparison or bitwise combination (e.g., `x == x`)"
 }
 
-/// **What it does:** Checks for arguments to `==` which have their address
-/// taken to satisfy a bound
-/// and suggests to dereference the other argument instead
-///
-/// **Why is this bad?** It is more idiomatic to dereference the other argument.
-///
-/// **Known problems:** None
-///
-/// **Example:**
-/// ```rust
-/// &x == y
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for arguments to `==` which have their address
+    /// taken to satisfy a bound
+    /// and suggests to dereference the other argument instead
+    ///
+    /// **Why is this bad?** It is more idiomatic to dereference the other argument.
+    ///
+    /// **Known problems:** None
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// &x == y
+    /// ```
     pub OP_REF,
     style,
     "taking a reference to satisfy the type constraints on `==`"
 }
 
-#[derive(Copy, Clone)]
-pub struct EqOp;
-
-impl LintPass for EqOp {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(EQ_OP, OP_REF)
-    }
-}
+declare_lint_pass!(EqOp => [EQ_OP, OP_REF]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EqOp {
-    #[allow(clippy::similar_names)]
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, e: &'tcx Expr) {
-        if let ExprKind::Binary(op, ref left, ref right) = e.node {
-            if in_macro(e.span) {
+    #[allow(clippy::similar_names, clippy::too_many_lines)]
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, e: &'tcx Expr<'_>) {
+        if let ExprKind::Binary(op, ref left, ref right) = e.kind {
+            if e.span.from_expansion() {
+                return;
+            }
+            let macro_with_not_op = |expr_kind: &ExprKind<'_>| {
+                if let ExprKind::Unary(_, ref expr) = *expr_kind {
+                    in_macro(expr.span)
+                } else {
+                    false
+                }
+            };
+            if macro_with_not_op(&left.kind) || macro_with_not_op(&right.kind) {
                 return;
             }
             if is_valid_operator(op) && SpanlessEq::new(cx).ignore_fn().eq_expr(left, right) {
@@ -92,15 +88,17 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EqOp {
                 BinOpKind::Shl => (cx.tcx.lang_items().shl_trait(), false),
                 BinOpKind::Shr => (cx.tcx.lang_items().shr_trait(), false),
                 BinOpKind::Ne | BinOpKind::Eq => (cx.tcx.lang_items().eq_trait(), true),
-                BinOpKind::Lt | BinOpKind::Le | BinOpKind::Ge | BinOpKind::Gt => (cx.tcx.lang_items().ord_trait(), true),
+                BinOpKind::Lt | BinOpKind::Le | BinOpKind::Ge | BinOpKind::Gt => {
+                    (cx.tcx.lang_items().partial_ord_trait(), true)
+                },
             };
             if let Some(trait_id) = trait_id {
                 #[allow(clippy::match_same_arms)]
-                match (&left.node, &right.node) {
+                match (&left.kind, &right.kind) {
                     // do not suggest to dereference literals
                     (&ExprKind::Lit(..), _) | (_, &ExprKind::Lit(..)) => {},
                     // &foo == &bar
-                    (&ExprKind::AddrOf(_, ref l), &ExprKind::AddrOf(_, ref r)) => {
+                    (&ExprKind::AddrOf(BorrowKind::Ref, _, ref l), &ExprKind::AddrOf(BorrowKind::Ref, _, ref r)) => {
                         let lty = cx.tables.expr_ty(l);
                         let rty = cx.tables.expr_ty(r);
                         let lcpy = is_copy(cx, lty);
@@ -122,17 +120,23 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EqOp {
                                     );
                                 },
                             )
-                        } else if lcpy && !rcpy && implements_trait(cx, lty, trait_id, &[cx.tables.expr_ty(right).into()]) {
+                        } else if lcpy
+                            && !rcpy
+                            && implements_trait(cx, lty, trait_id, &[cx.tables.expr_ty(right).into()])
+                        {
                             span_lint_and_then(cx, OP_REF, e.span, "needlessly taken reference of left operand", |db| {
                                 let lsnip = snippet(cx, l.span, "...").to_string();
-                                db.span_suggestion_with_applicability(
+                                db.span_suggestion(
                                     left.span,
                                     "use the left value directly",
                                     lsnip,
-                                    Applicability::MachineApplicable, // snippet
+                                    Applicability::MaybeIncorrect, // FIXME #2597
                                 );
                             })
-                        } else if !lcpy && rcpy && implements_trait(cx, cx.tables.expr_ty(left), trait_id, &[rty.into()]) {
+                        } else if !lcpy
+                            && rcpy
+                            && implements_trait(cx, cx.tables.expr_ty(left), trait_id, &[rty.into()])
+                        {
                             span_lint_and_then(
                                 cx,
                                 OP_REF,
@@ -140,44 +144,48 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EqOp {
                                 "needlessly taken reference of right operand",
                                 |db| {
                                     let rsnip = snippet(cx, r.span, "...").to_string();
-                                    db.span_suggestion_with_applicability(
+                                    db.span_suggestion(
                                         right.span,
                                         "use the right value directly",
                                         rsnip,
-                                        Applicability::MachineApplicable, // snippet
+                                        Applicability::MaybeIncorrect, // FIXME #2597
                                     );
                                 },
                             )
                         }
                     },
                     // &foo == bar
-                    (&ExprKind::AddrOf(_, ref l), _) => {
+                    (&ExprKind::AddrOf(BorrowKind::Ref, _, ref l), _) => {
                         let lty = cx.tables.expr_ty(l);
                         let lcpy = is_copy(cx, lty);
-                        if (requires_ref || lcpy) && implements_trait(cx, lty, trait_id, &[cx.tables.expr_ty(right).into()]) {
+                        if (requires_ref || lcpy)
+                            && implements_trait(cx, lty, trait_id, &[cx.tables.expr_ty(right).into()])
+                        {
                             span_lint_and_then(cx, OP_REF, e.span, "needlessly taken reference of left operand", |db| {
                                 let lsnip = snippet(cx, l.span, "...").to_string();
-                                db.span_suggestion_with_applicability(
+                                db.span_suggestion(
                                     left.span,
                                     "use the left value directly",
                                     lsnip,
-                                    Applicability::MachineApplicable, // snippet
+                                    Applicability::MaybeIncorrect, // FIXME #2597
                                 );
                             })
                         }
                     },
                     // foo == &bar
-                    (_, &ExprKind::AddrOf(_, ref r)) => {
+                    (_, &ExprKind::AddrOf(BorrowKind::Ref, _, ref r)) => {
                         let rty = cx.tables.expr_ty(r);
                         let rcpy = is_copy(cx, rty);
-                        if (requires_ref || rcpy) && implements_trait(cx, cx.tables.expr_ty(left), trait_id, &[rty.into()]) {
+                        if (requires_ref || rcpy)
+                            && implements_trait(cx, cx.tables.expr_ty(left), trait_id, &[rty.into()])
+                        {
                             span_lint_and_then(cx, OP_REF, e.span, "taken reference of right operand", |db| {
                                 let rsnip = snippet(cx, r.span, "...").to_string();
-                                db.span_suggestion_with_applicability(
+                                db.span_suggestion(
                                     right.span,
                                     "use the right value directly",
                                     rsnip,
-                                    Applicability::MachineApplicable, // snippet
+                                    Applicability::MaybeIncorrect, // FIXME #2597
                                 );
                             })
                         }
@@ -189,10 +197,21 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EqOp {
     }
 }
 
-
 fn is_valid_operator(op: BinOp) -> bool {
     match op.node {
-        BinOpKind::Sub | BinOpKind::Div | BinOpKind::Eq | BinOpKind::Lt | BinOpKind::Le | BinOpKind::Gt | BinOpKind::Ge | BinOpKind::Ne | BinOpKind::And | BinOpKind::Or | BinOpKind::BitXor | BinOpKind::BitAnd | BinOpKind::BitOr => true,
+        BinOpKind::Sub
+        | BinOpKind::Div
+        | BinOpKind::Eq
+        | BinOpKind::Lt
+        | BinOpKind::Le
+        | BinOpKind::Gt
+        | BinOpKind::Ge
+        | BinOpKind::Ne
+        | BinOpKind::And
+        | BinOpKind::Or
+        | BinOpKind::BitXor
+        | BinOpKind::BitAnd
+        | BinOpKind::BitOr => true,
         _ => false,
     }
 }

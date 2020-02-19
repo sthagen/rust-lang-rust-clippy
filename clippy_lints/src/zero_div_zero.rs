@@ -1,50 +1,34 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 use crate::consts::{constant_simple, Constant};
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
+use crate::utils::span_lint_and_help;
 use if_chain::if_chain;
-use crate::rustc::hir::*;
-use crate::utils::span_help_and_lint;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for `0.0 / 0.0`.
-///
-/// **Why is this bad?** It's less readable than `std::f32::NAN` or
-/// `std::f64::NAN`.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// 0.0f32 / 0.0
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for `0.0 / 0.0`.
+    ///
+    /// **Why is this bad?** It's less readable than `std::f32::NAN` or
+    /// `std::f64::NAN`.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// 0.0f32 / 0.0;
+    /// ```
     pub ZERO_DIVIDED_BY_ZERO,
     complexity,
-    "usage of `0.0 / 0.0` to obtain NaN instead of std::f32::NaN or std::f64::NaN"
+    "usage of `0.0 / 0.0` to obtain NaN instead of `std::f32::NAN` or `std::f64::NAN`"
 }
 
-pub struct Pass;
+declare_lint_pass!(ZeroDiv => [ZERO_DIVIDED_BY_ZERO]);
 
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(ZERO_DIVIDED_BY_ZERO)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for ZeroDiv {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
         // check for instances of 0.0/0.0
         if_chain! {
-            if let ExprKind::Binary(ref op, ref left, ref right) = expr.node;
+            if let ExprKind::Binary(ref op, ref left, ref right) = expr.kind;
             if let BinOpKind::Div = op.node;
             // TODO - constant_simple does not fold many operations involving floats.
             // That's probably fine for this lint - it's pretty unlikely that someone would
@@ -61,11 +45,11 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
                     | (_, Constant::F64(_)) => "f64",
                     _ => "f32"
                 };
-                span_help_and_lint(
+                span_lint_and_help(
                     cx,
                     ZERO_DIVIDED_BY_ZERO,
                     expr.span,
-                    "constant division of 0.0 with 0.0 will always result in NaN",
+                    "constant division of `0.0` with `0.0` will always result in NaN",
                     &format!(
                         "Consider using `std::{}::NAN` if you would like a constant representing NaN",
                         float_type,

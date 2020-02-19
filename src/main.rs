@@ -1,18 +1,4 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-// error-pattern:yummy
-#![feature(box_syntax)]
-#![feature(rustc_private)]
-
-#![allow(clippy::missing_docs_in_private_items)]
+#![cfg_attr(feature = "deny-warnings", deny(warnings))]
 
 use rustc_tools_util::*;
 
@@ -35,18 +21,15 @@ with:
     -D --deny OPT       Set lint denied
     -F --forbid OPT     Set lint forbidden
 
-The feature `cargo-clippy` is automatically defined for convenience. You can use
-it to allow or deny lints from the code, eg.:
+You can use tool lints to allow or deny lints from your code, eg.:
 
-    #[cfg_attr(feature = "cargo-clippy", allow(needless_lifetimes))]
+    #[allow(clippy::needless_lifetimes)]
 "#;
 
-#[allow(clippy::print_stdout)]
 fn show_help() {
     println!("{}", CARGO_CLIPPY_HELP);
 }
 
-#[allow(clippy::print_stdout)]
 fn show_version() {
     let version_info = rustc_tools_util::get_version_info!();
     println!("{}", version_info);
@@ -75,10 +58,8 @@ where
 {
     let mut args = vec!["check".to_owned()];
 
-    let mut found_dashes = false;
     for arg in old_args.by_ref() {
-        found_dashes |= arg == "--";
-        if found_dashes {
+        if arg == "--" {
             break;
         }
         args.push(arg);
@@ -96,11 +77,7 @@ where
     let target_dir = std::env::var_os("CLIPPY_DOGFOOD")
         .map(|_| {
             std::env::var_os("CARGO_MANIFEST_DIR").map_or_else(
-                || {
-                    let mut fallback = std::ffi::OsString::new();
-                    fallback.push("clippy_dogfood");
-                    fallback
-                },
+                || std::ffi::OsString::from("clippy_dogfood"),
                 |d| {
                     std::path::PathBuf::from(d)
                         .join("target")
@@ -108,7 +85,14 @@ where
                         .into_os_string()
                 },
             )
-        }).map(|p| ("CARGO_TARGET_DIR", p));
+        })
+        .map(|p| ("CARGO_TARGET_DIR", p));
+
+    // Run the dogfood tests directly on nightly cargo. This is required due
+    // to a bug in rustup.rs when running cargo on custom toolchains. See issue #3118.
+    if std::env::var_os("CLIPPY_DOGFOOD").is_some() && cfg!(windows) {
+        args.insert(0, "+nightly".to_string());
+    }
 
     let exit_status = std::process::Command::new("cargo")
         .args(&args)

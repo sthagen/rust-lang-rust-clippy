@@ -4,7 +4,7 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-    <title>Clippy</title>
+    <title>Clippy lints documentation</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.6/css/bootstrap.min.css"/>
     <style>
@@ -36,14 +36,14 @@
                 <ul class="list-group">
                     <a class="list-group-item" ng-repeat="version in data | orderBy:versionOrder:true"
                        href="./{{version}}/index.html">
-                        {{normalizeVersion(version)}}
+                        {{normalizeVersionDisplay(version)}}
                     </a>
                 </ul>
             </article>
         </div>
     </div>
 
-    <a href="https://github.com/rust-lang-nursery/rust-clippy">
+    <a href="https://github.com/rust-lang/rust-clippy">
         <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"/>
     </a>
 
@@ -54,13 +54,17 @@
         .controller('docVersions', function ($scope, $http) {
             $scope.loading = true;
 
-            $scope.normalizeVersion = function(v) {
+            $scope.normalizeVersionDisplay = function(v) {
                 return v.replace(/^v/, '');
+            };
+
+            $scope.normalizeVersion = function(v) {
+                return v.replace(/^v/, '').replace(/^rust-/, '');
             };
 
             $scope.versionOrder = function(v) {
                 if (v === 'master') { return Infinity; }
-                if (v === 'current') { return Number.MAX_VALUE; }
+                if (v === 'stable') { return Number.MAX_VALUE; }
 
                 return $scope.normalizeVersion(v)
                     .split('.')

@@ -1,104 +1,94 @@
-error: calling `mem::discriminant` on non-enum type `&str`
-  --> $DIR/mem_discriminant.rs:24:5
-   |
-24 |     mem::discriminant(&"hello");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-note: lint level defined here
-  --> $DIR/mem_discriminant.rs:11:9
-   |
-11 | #![deny(clippy::mem_discriminant_non_enum)]
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 error: calling `mem::discriminant` on non-enum type `&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:25:5
+  --> $DIR/mem_discriminant.rs:14:5
    |
-25 |     mem::discriminant(&&Some(2));
+LL |     mem::discriminant(&&Some(2));
    |     ^^^^^^^^^^^^^^^^^^---------^
    |                       |
    |                       help: try dereferencing: `&Some(2)`
+   |
+note: the lint level is defined here
+  --> $DIR/mem_discriminant.rs:3:9
+   |
+LL | #![deny(clippy::mem_discriminant_non_enum)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: calling `mem::discriminant` on non-enum type `&std::option::Option<u8>`
-  --> $DIR/mem_discriminant.rs:26:5
+  --> $DIR/mem_discriminant.rs:15:5
    |
-26 |     mem::discriminant(&&None::<u8>);
+LL |     mem::discriminant(&&None::<u8>);
    |     ^^^^^^^^^^^^^^^^^^------------^
    |                       |
    |                       help: try dereferencing: `&None::<u8>`
 
 error: calling `mem::discriminant` on non-enum type `&Foo`
-  --> $DIR/mem_discriminant.rs:27:5
+  --> $DIR/mem_discriminant.rs:16:5
    |
-27 |     mem::discriminant(&&Foo::One(5));
+LL |     mem::discriminant(&&Foo::One(5));
    |     ^^^^^^^^^^^^^^^^^^-------------^
    |                       |
    |                       help: try dereferencing: `&Foo::One(5)`
 
 error: calling `mem::discriminant` on non-enum type `&Foo`
-  --> $DIR/mem_discriminant.rs:28:5
+  --> $DIR/mem_discriminant.rs:17:5
    |
-28 |     mem::discriminant(&&Foo::Two(5));
+LL |     mem::discriminant(&&Foo::Two(5));
    |     ^^^^^^^^^^^^^^^^^^-------------^
    |                       |
    |                       help: try dereferencing: `&Foo::Two(5)`
 
-error: calling `mem::discriminant` on non-enum type `A`
-  --> $DIR/mem_discriminant.rs:29:5
-   |
-29 |     mem::discriminant(&A(Foo::One(0)));
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 error: calling `mem::discriminant` on non-enum type `&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:33:5
+  --> $DIR/mem_discriminant.rs:21:5
    |
-33 |     mem::discriminant(&ro);
+LL |     mem::discriminant(&ro);
    |     ^^^^^^^^^^^^^^^^^^---^
    |                       |
    |                       help: try dereferencing: `ro`
 
 error: calling `mem::discriminant` on non-enum type `&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:34:5
+  --> $DIR/mem_discriminant.rs:22:5
    |
-34 |     mem::discriminant(rro);
+LL |     mem::discriminant(rro);
    |     ^^^^^^^^^^^^^^^^^^---^
    |                       |
    |                       help: try dereferencing: `*rro`
 
 error: calling `mem::discriminant` on non-enum type `&&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:35:5
+  --> $DIR/mem_discriminant.rs:23:5
    |
-35 |     mem::discriminant(&rro);
+LL |     mem::discriminant(&rro);
    |     ^^^^^^^^^^^^^^^^^^----^
    |                       |
    |                       help: try dereferencing: `*rro`
 
 error: calling `mem::discriminant` on non-enum type `&&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:38:27
+  --> $DIR/mem_discriminant.rs:27:13
    |
-38 |         ($param:expr) => (mem::discriminant($param))
-   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |             mem::discriminant($param)
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^
 ...
-41 |     mem_discriminant_but_in_a_macro!(&rro);
+LL |     mem_discriminant_but_in_a_macro!(&rro);
    |     ---------------------------------------
    |     |                                |
    |     |                                help: try dereferencing: `*rro`
    |     in this macro invocation
+   |
+   = note: this error originates in a macro (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: calling `mem::discriminant` on non-enum type `&&&&&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:44:5
+  --> $DIR/mem_discriminant.rs:34:5
    |
-44 |     mem::discriminant(&rrrrro);
+LL |     mem::discriminant(&rrrrro);
    |     ^^^^^^^^^^^^^^^^^^-------^
    |                       |
    |                       help: try dereferencing: `****rrrrro`
 
 error: calling `mem::discriminant` on non-enum type `&&&std::option::Option<i32>`
-  --> $DIR/mem_discriminant.rs:45:5
+  --> $DIR/mem_discriminant.rs:35:5
    |
-45 |     mem::discriminant(*rrrrro);
+LL |     mem::discriminant(*rrrrro);
    |     ^^^^^^^^^^^^^^^^^^-------^
    |                       |
    |                       help: try dereferencing: `****rrrrro`
 
-error: aborting due to 12 previous errors
+error: aborting due to 10 previous errors
 

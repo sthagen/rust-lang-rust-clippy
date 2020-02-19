@@ -1,98 +1,89 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 //! Checks for useless borrowed references.
 //!
 //! This lint is **warn** by default
 
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
+use crate::utils::{snippet_with_applicability, span_lint_and_then};
 use if_chain::if_chain;
-use crate::rustc::hir::{BindingAnnotation, MutImmutable, Pat, PatKind};
-use crate::utils::{in_macro, snippet, span_lint_and_then};
-use crate::rustc_errors::Applicability;
+use rustc_errors::Applicability;
+use rustc_hir::{BindingAnnotation, Mutability, Node, Pat, PatKind};
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for useless borrowed references.
-///
-/// **Why is this bad?** It is mostly useless and make the code look more
-/// complex than it
-/// actually is.
-///
-/// **Known problems:** It seems that the `&ref` pattern is sometimes useful.
-/// For instance in the following snippet:
-/// ```rust
-/// enum Animal {
-///     Cat(u64),
-///     Dog(u64),
-/// }
-///
-/// fn foo(a: &Animal, b: &Animal) {
-///     match (a, b) {
-/// (&Animal::Cat(v), k) | (k, &Animal::Cat(v)) => (), // lifetime
-/// mismatch error
-///         (&Animal::Dog(ref c), &Animal::Dog(_)) => ()
-///     }
-/// }
-/// ```
-/// There is a lifetime mismatch error for `k` (indeed a and b have distinct
-/// lifetime).
-/// This can be fixed by using the `&ref` pattern.
-/// However, the code can also be fixed by much cleaner ways
-///
-/// **Example:**
-/// ```rust
-///     let mut v = Vec::<String>::new();
-///     let _ = v.iter_mut().filter(|&ref a| a.is_empty());
-/// ```
-/// This closure takes a reference on something that has been matched as a
-/// reference and
-/// de-referenced.
-/// As such, it could just be |a| a.is_empty()
 declare_clippy_lint! {
+    /// **What it does:** Checks for useless borrowed references.
+    ///
+    /// **Why is this bad?** It is mostly useless and make the code look more
+    /// complex than it
+    /// actually is.
+    ///
+    /// **Known problems:** It seems that the `&ref` pattern is sometimes useful.
+    /// For instance in the following snippet:
+    /// ```rust,ignore
+    /// enum Animal {
+    ///     Cat(u64),
+    ///     Dog(u64),
+    /// }
+    ///
+    /// fn foo(a: &Animal, b: &Animal) {
+    ///     match (a, b) {
+    ///         (&Animal::Cat(v), k) | (k, &Animal::Cat(v)) => (), // lifetime mismatch error
+    ///         (&Animal::Dog(ref c), &Animal::Dog(_)) => ()
+    ///     }
+    /// }
+    /// ```
+    /// There is a lifetime mismatch error for `k` (indeed a and b have distinct
+    /// lifetime).
+    /// This can be fixed by using the `&ref` pattern.
+    /// However, the code can also be fixed by much cleaner ways
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let mut v = Vec::<String>::new();
+    /// let _ = v.iter_mut().filter(|&ref a| a.is_empty());
+    /// ```
+    /// This closure takes a reference on something that has been matched as a
+    /// reference and
+    /// de-referenced.
+    /// As such, it could just be |a| a.is_empty()
     pub NEEDLESS_BORROWED_REFERENCE,
     complexity,
     "taking a needless borrowed reference"
 }
 
-#[derive(Copy, Clone)]
-pub struct NeedlessBorrowedRef;
-
-impl LintPass for NeedlessBorrowedRef {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(NEEDLESS_BORROWED_REFERENCE)
-    }
-}
+declare_lint_pass!(NeedlessBorrowedRef => [NEEDLESS_BORROWED_REFERENCE]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for NeedlessBorrowedRef {
-    fn check_pat(&mut self, cx: &LateContext<'a, 'tcx>, pat: &'tcx Pat) {
-        if in_macro(pat.span) {
+    fn check_pat(&mut self, cx: &LateContext<'a, 'tcx>, pat: &'tcx Pat<'_>) {
+        if pat.span.from_expansion() {
             // OK, simple enough, lints doesn't check in macro.
             return;
         }
 
         if_chain! {
             // Only lint immutable refs, because `&mut ref T` may be useful.
-            if let PatKind::Ref(ref sub_pat, MutImmutable) = pat.node;
+            if let PatKind::Ref(ref sub_pat, Mutability::Not) = pat.kind;
 
             // Check sub_pat got a `ref` keyword (excluding `ref mut`).
-            if let PatKind::Binding(BindingAnnotation::Ref, _, spanned_name, ..) = sub_pat.node;
+            if let PatKind::Binding(BindingAnnotation::Ref, .., spanned_name, _) = sub_pat.kind;
+            let parent_id = cx.tcx.hir().get_parent_node(pat.hir_id);
+            if let Some(parent_node) = cx.tcx.hir().find(parent_id);
             then {
+                // do not recurse within patterns, as they may have other references
+                // XXXManishearth we can relax this constraint if we only check patterns
+                // with a single ref pattern inside them
+                if let Node::Pat(_) = parent_node {
+                    return;
+                }
+                let mut applicability = Applicability::MachineApplicable;
                 span_lint_and_then(cx, NEEDLESS_BORROWED_REFERENCE, pat.span,
                                    "this pattern takes a reference on something that is being de-referenced",
                                    |db| {
-                                       let hint = snippet(cx, spanned_name.span, "..").into_owned();
-                                       db.span_suggestion_with_applicability(
-                                           pat.span, 
+                                       let hint = snippet_with_applicability(cx, spanned_name.span, "..", &mut applicability).into_owned();
+                                       db.span_suggestion(
+                                           pat.span,
                                            "try removing the `&ref` part and just keep",
                                            hint,
-                                           Applicability::MachineApplicable, // snippet
+                                           applicability,
                                        );
                                    });
             }

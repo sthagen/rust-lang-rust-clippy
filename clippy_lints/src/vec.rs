@@ -1,55 +1,39 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::hir::*;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::ty::{self, Ty};
-use crate::syntax::source_map::Span;
-use crate::utils::{higher, is_copy, snippet, span_lint_and_sugg};
 use crate::consts::constant;
+use crate::utils::{higher, is_copy, snippet_with_applicability, span_lint_and_sugg};
+use if_chain::if_chain;
+use rustc::ty::{self, Ty};
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
 
-/// **What it does:** Checks for usage of `&vec![..]` when using `&[..]` would
-/// be possible.
-///
-/// **Why is this bad?** This is less efficient.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust,ignore
-/// foo(&vec![1, 2])
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for usage of `&vec![..]` when using `&[..]` would
+    /// be possible.
+    ///
+    /// **Why is this bad?** This is less efficient.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust,ignore
+    /// foo(&vec![1, 2])
+    /// ```
     pub USELESS_VEC,
     perf,
     "useless `vec!`"
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Pass;
+declare_lint_pass!(UselessVec => [USELESS_VEC]);
 
-impl LintPass for Pass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(USELESS_VEC)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UselessVec {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
         // search for `&vec![_]` expressions where the adjusted type is `&[_]`
         if_chain! {
-            if let ty::Ref(_, ty, _) = cx.tables.expr_ty_adjusted(expr).sty;
-            if let ty::Slice(..) = ty.sty;
-            if let ExprKind::AddrOf(_, ref addressee) = expr.node;
+            if let ty::Ref(_, ty, _) = cx.tables.expr_ty_adjusted(expr).kind;
+            if let ty::Slice(..) = ty.kind;
+            if let ExprKind::AddrOf(BorrowKind::Ref, _, ref addressee) = expr.kind;
             if let Some(vec_args) = higher::vec_macro(cx, addressee);
             then {
                 check_vec_macro(cx, &vec_args, expr.span);
@@ -65,10 +49,11 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
                 // report the error around the `vec!` not inside `<std macros>:`
                 let span = arg.span
                     .ctxt()
-                    .outer()
-                    .expn_info()
-                    .map(|info| info.call_site)
-                    .expect("unable to get call_site");
+                    .outer_expn_data()
+                    .call_site
+                    .ctxt()
+                    .outer_expn_data()
+                    .call_site;
                 check_vec_macro(cx, &vec_args, span);
             }
         }
@@ -76,20 +61,27 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Pass {
 }
 
 fn check_vec_macro<'a, 'tcx>(cx: &LateContext<'a, 'tcx>, vec_args: &higher::VecArgs<'tcx>, span: Span) {
+    let mut applicability = Applicability::MachineApplicable;
     let snippet = match *vec_args {
         higher::VecArgs::Repeat(elem, len) => {
             if constant(cx, cx.tables, len).is_some() {
-                format!("&[{}; {}]", snippet(cx, elem.span, "elem"), snippet(cx, len.span, "len"))
+                format!(
+                    "&[{}; {}]",
+                    snippet_with_applicability(cx, elem.span, "elem", &mut applicability),
+                    snippet_with_applicability(cx, len.span, "len", &mut applicability)
+                )
             } else {
                 return;
             }
         },
-        higher::VecArgs::Vec(args) => if let Some(last) = args.iter().last() {
-            let span = args[0].span.to(last.span);
+        higher::VecArgs::Vec(args) => {
+            if let Some(last) = args.iter().last() {
+                let span = args[0].span.to(last.span);
 
-            format!("&[{}]", snippet(cx, span, ".."))
-        } else {
-            "&[]".into()
+                format!("&[{}]", snippet_with_applicability(cx, span, "..", &mut applicability))
+            } else {
+                "&[]".into()
+            }
         },
     };
 
@@ -100,12 +92,13 @@ fn check_vec_macro<'a, 'tcx>(cx: &LateContext<'a, 'tcx>, vec_args: &higher::VecA
         "useless use of `vec!`",
         "you can use a slice directly",
         snippet,
+        applicability,
     );
 }
 
-/// Return the item type of the vector (ie. the `T` in `Vec<T>`).
+/// Returns the item type of the vector (i.e., the `T` in `Vec<T>`).
 fn vec_type(ty: Ty<'_>) -> Ty<'_> {
-    if let ty::Adt(_, substs) = ty.sty {
+    if let ty::Adt(_, substs) = ty.kind {
         substs.type_at(0)
     } else {
         panic!("The type of `vec!` is a not a struct?");

@@ -1,177 +1,159 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
 //! Checks for usage of  `&Vec[_]` and `&String`.
 
-use std::borrow::Cow;
-use crate::rustc::hir::*;
-use crate::rustc::hir::QPath;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::ty;
-use crate::syntax::ast::NodeId;
-use crate::syntax::source_map::Span;
-use crate::syntax_pos::MultiSpan;
-use crate::utils::{match_qpath, match_type, paths, snippet_opt, span_lint, span_lint_and_then, walk_ptrs_hir_ty};
 use crate::utils::ptr::get_spans;
-use crate::rustc_errors::Applicability;
+use crate::utils::{
+    is_type_diagnostic_item, match_qpath, match_type, paths, snippet_opt, span_lint, span_lint_and_then,
+    walk_ptrs_hir_ty,
+};
+use if_chain::if_chain;
+use rustc::ty;
+use rustc_errors::Applicability;
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
+use rustc_span::{MultiSpan, Symbol};
+use std::borrow::Cow;
 
-/// **What it does:** This lint checks for function arguments of type `&String`
-/// or `&Vec` unless the references are mutable. It will also suggest you
-/// replace `.clone()` calls with the appropriate `.to_owned()`/`to_string()`
-/// calls.
-///
-/// **Why is this bad?** Requiring the argument to be of the specific size
-/// makes the function less useful for no benefit; slices in the form of `&[T]`
-/// or `&str` usually suffice and can be obtained from other types, too.
-///
-/// **Known problems:** The lint does not follow data. So if you have an
-/// argument `x` and write `let y = x; y.clone()` the lint will not suggest
-/// changing that `.clone()` to `.to_owned()`.
-///
-/// Other functions called from this function taking a `&String` or `&Vec`
-/// argument may also fail to compile if you change the argument. Applying
-/// this lint on them will fix the problem, but they may be in other crates.
-///
-/// Also there may be `fn(&Vec)`-typed references pointing to your function.
-/// If you have them, you will get a compiler error after applying this lint's
-/// suggestions. You then have the choice to undo your changes or change the
-/// type of the reference.
-///
-/// Note that if the function is part of your public interface, there may be
-/// other crates referencing it you may not be aware. Carefully deprecate the
-/// function before applying the lint suggestions in this case.
-///
-/// **Example:**
-/// ```rust
-/// fn foo(&Vec<u32>) { .. }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** This lint checks for function arguments of type `&String`
+    /// or `&Vec` unless the references are mutable. It will also suggest you
+    /// replace `.clone()` calls with the appropriate `.to_owned()`/`to_string()`
+    /// calls.
+    ///
+    /// **Why is this bad?** Requiring the argument to be of the specific size
+    /// makes the function less useful for no benefit; slices in the form of `&[T]`
+    /// or `&str` usually suffice and can be obtained from other types, too.
+    ///
+    /// **Known problems:** The lint does not follow data. So if you have an
+    /// argument `x` and write `let y = x; y.clone()` the lint will not suggest
+    /// changing that `.clone()` to `.to_owned()`.
+    ///
+    /// Other functions called from this function taking a `&String` or `&Vec`
+    /// argument may also fail to compile if you change the argument. Applying
+    /// this lint on them will fix the problem, but they may be in other crates.
+    ///
+    /// Also there may be `fn(&Vec)`-typed references pointing to your function.
+    /// If you have them, you will get a compiler error after applying this lint's
+    /// suggestions. You then have the choice to undo your changes or change the
+    /// type of the reference.
+    ///
+    /// Note that if the function is part of your public interface, there may be
+    /// other crates referencing it you may not be aware. Carefully deprecate the
+    /// function before applying the lint suggestions in this case.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// fn foo(&Vec<u32>) { .. }
+    /// ```
     pub PTR_ARG,
     style,
-    "fn arguments of the type `&Vec<...>` or `&String`, suggesting to use `&[...]` or `&str` \
-     instead, respectively"
+    "fn arguments of the type `&Vec<...>` or `&String`, suggesting to use `&[...]` or `&str` instead, respectively"
 }
 
-/// **What it does:** This lint checks for equality comparisons with `ptr::null`
-///
-/// **Why is this bad?** It's easier and more readable to use the inherent
-/// `.is_null()`
-/// method instead
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// if x == ptr::null { .. }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** This lint checks for equality comparisons with `ptr::null`
+    ///
+    /// **Why is this bad?** It's easier and more readable to use the inherent
+    /// `.is_null()`
+    /// method instead
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// if x == ptr::null {
+    ///     ..
+    /// }
+    /// ```
     pub CMP_NULL,
     style,
     "comparing a pointer to a null pointer, suggesting to use `.is_null()` instead."
 }
 
-/// **What it does:** This lint checks for functions that take immutable
-/// references and return
-/// mutable ones.
-///
-/// **Why is this bad?** This is trivially unsound, as one can create two
-/// mutable references
-/// from the same (immutable!) source. This
-/// [error](https://github.com/rust-lang/rust/issues/39465)
-/// actually lead to an interim Rust release 1.15.1.
-///
-/// **Known problems:** To be on the conservative side, if there's at least one
-/// mutable reference
-/// with the output lifetime, this lint will not trigger. In practice, this
-/// case is unlikely anyway.
-///
-/// **Example:**
-/// ```rust
-/// fn foo(&Foo) -> &mut Bar { .. }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** This lint checks for functions that take immutable
+    /// references and return
+    /// mutable ones.
+    ///
+    /// **Why is this bad?** This is trivially unsound, as one can create two
+    /// mutable references
+    /// from the same (immutable!) source. This
+    /// [error](https://github.com/rust-lang/rust/issues/39465)
+    /// actually lead to an interim Rust release 1.15.1.
+    ///
+    /// **Known problems:** To be on the conservative side, if there's at least one
+    /// mutable reference
+    /// with the output lifetime, this lint will not trigger. In practice, this
+    /// case is unlikely anyway.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// fn foo(&Foo) -> &mut Bar { .. }
+    /// ```
     pub MUT_FROM_REF,
     correctness,
     "fns that create mutable refs from immutable ref args"
 }
 
-#[derive(Copy, Clone)]
-pub struct PointerPass;
+declare_lint_pass!(Ptr => [PTR_ARG, CMP_NULL, MUT_FROM_REF]);
 
-impl LintPass for PointerPass {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(PTR_ARG, CMP_NULL, MUT_FROM_REF)
-    }
-}
-
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for PointerPass {
-    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item) {
-        if let ItemKind::Fn(ref decl, _, _, body_id) = item.node {
-            check_fn(cx, decl, item.id, Some(body_id));
+impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Ptr {
+    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item<'_>) {
+        if let ItemKind::Fn(ref sig, _, body_id) = item.kind {
+            check_fn(cx, &sig.decl, item.hir_id, Some(body_id));
         }
     }
 
-    fn check_impl_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx ImplItem) {
-        if let ImplItemKind::Method(ref sig, body_id) = item.node {
-            if let Some(Node::Item(it)) = cx.tcx.hir.find(cx.tcx.hir.get_parent(item.id)) {
-                if let ItemKind::Impl(_, _, _, _, Some(_), _, _) = it.node {
+    fn check_impl_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx ImplItem<'_>) {
+        if let ImplItemKind::Method(ref sig, body_id) = item.kind {
+            let parent_item = cx.tcx.hir().get_parent_item(item.hir_id);
+            if let Some(Node::Item(it)) = cx.tcx.hir().find(parent_item) {
+                if let ItemKind::Impl { of_trait: Some(_), .. } = it.kind {
                     return; // ignore trait impls
                 }
             }
-            check_fn(cx, &sig.decl, item.id, Some(body_id));
+            check_fn(cx, &sig.decl, item.hir_id, Some(body_id));
         }
     }
 
-    fn check_trait_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx TraitItem) {
-        if let TraitItemKind::Method(ref sig, ref trait_method) = item.node {
+    fn check_trait_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx TraitItem<'_>) {
+        if let TraitItemKind::Method(ref sig, ref trait_method) = item.kind {
             let body_id = if let TraitMethod::Provided(b) = *trait_method {
                 Some(b)
             } else {
                 None
             };
-            check_fn(cx, &sig.decl, item.id, body_id);
+            check_fn(cx, &sig.decl, item.hir_id, body_id);
         }
     }
 
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr) {
-        if let ExprKind::Binary(ref op, ref l, ref r) = expr.node {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
+        if let ExprKind::Binary(ref op, ref l, ref r) = expr.kind {
             if (op.node == BinOpKind::Eq || op.node == BinOpKind::Ne) && (is_null_path(l) || is_null_path(r)) {
                 span_lint(
                     cx,
                     CMP_NULL,
                     expr.span,
-                    "Comparing with null is better expressed by the .is_null() method",
+                    "Comparing with null is better expressed by the `.is_null()` method",
                 );
             }
         }
     }
 }
 
-fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id: Option<BodyId>) {
-    let fn_def_id = cx.tcx.hir.local_def_id(fn_id);
+#[allow(clippy::too_many_lines)]
+fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl<'_>, fn_id: HirId, opt_body_id: Option<BodyId>) {
+    let fn_def_id = cx.tcx.hir().local_def_id(fn_id);
     let sig = cx.tcx.fn_sig(fn_def_id);
     let fn_ty = sig.skip_binder();
 
     for (idx, (arg, ty)) in decl.inputs.iter().zip(fn_ty.inputs()).enumerate() {
-        if let ty::Ref(
-            _,
-            ty,
-            MutImmutable
-        ) = ty.sty
-        {
-            if match_type(cx, ty, &paths::VEC) {
+        if let ty::Ref(_, ty, Mutability::Not) = ty.kind {
+            if is_type_diagnostic_item(cx, ty, Symbol::intern("vec_type")) {
                 let mut ty_snippet = None;
                 if_chain! {
-                    if let TyKind::Path(QPath::Resolved(_, ref path)) = walk_ptrs_hir_ty(arg).node;
+                    if let TyKind::Path(QPath::Resolved(_, ref path)) = walk_ptrs_hir_ty(arg).kind;
                     if let Some(&PathSegment{args: Some(ref parameters), ..}) = path.segments.last();
                     then {
                         let types: Vec<_> = parameters.args.iter().filter_map(|arg| match arg {
@@ -192,20 +174,19 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
                          with non-Vec-based slices.",
                         |db| {
                             if let Some(ref snippet) = ty_snippet {
-                                db.span_suggestion_with_applicability(
-                                            arg.span,
-                                            "change this to",
-                                            format!("&[{}]", snippet),
-                                            Applicability::Unspecified,
-                                            );
+                                db.span_suggestion(
+                                    arg.span,
+                                    "change this to",
+                                    format!("&[{}]", snippet),
+                                    Applicability::Unspecified,
+                                );
                             }
                             for (clonespan, suggestion) in spans {
-                                db.span_suggestion_with_applicability(
+                                db.span_suggestion(
                                     clonespan,
-                                    &snippet_opt(cx, clonespan).map_or(
-                                        "change the call to".into(),
-                                        |x| Cow::Owned(format!("change `{}` to", x)),
-                                    ),
+                                    &snippet_opt(cx, clonespan).map_or("change the call to".into(), |x| {
+                                        Cow::Owned(format!("change `{}` to", x))
+                                    }),
                                     suggestion.into(),
                                     Applicability::Unspecified,
                                 );
@@ -221,19 +202,13 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
                         arg.span,
                         "writing `&String` instead of `&str` involves a new object where a slice will do.",
                         |db| {
-                            db.span_suggestion_with_applicability(
-                                arg.span,
-                                "change this to",
-                                "&str".into(),
-                                Applicability::Unspecified,
-                            );
+                            db.span_suggestion(arg.span, "change this to", "&str".into(), Applicability::Unspecified);
                             for (clonespan, suggestion) in spans {
-                                db.span_suggestion_short_with_applicability(
+                                db.span_suggestion_short(
                                     clonespan,
-                                    &snippet_opt(cx, clonespan).map_or(
-                                        "change the call to".into(),
-                                        |x| Cow::Owned(format!("change `{}` to", x)),
-                                    ),
+                                    &snippet_opt(cx, clonespan).map_or("change the call to".into(), |x| {
+                                        Cow::Owned(format!("change `{}` to", x))
+                                    }),
                                     suggestion.into(),
                                     Applicability::Unspecified,
                                 );
@@ -243,15 +218,15 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
                 }
             } else if match_type(cx, ty, &paths::COW) {
                 if_chain! {
-                    if let TyKind::Rptr(_, MutTy { ref ty, ..} ) = arg.node;
-                    if let TyKind::Path(ref path) = ty.node;
+                    if let TyKind::Rptr(_, MutTy { ref ty, ..} ) = arg.kind;
+                    if let TyKind::Path(ref path) = ty.kind;
                     if let QPath::Resolved(None, ref pp) = *path;
                     if let [ref bx] = *pp.segments;
                     if let Some(ref params) = bx.args;
                     if !params.parenthesized;
                     if let Some(inner) = params.args.iter().find_map(|arg| match arg {
                         GenericArg::Type(ty) => Some(ty),
-                        GenericArg::Lifetime(_) => None,
+                        _ => None,
                     });
                     then {
                         let replacement = snippet_opt(cx, inner.span);
@@ -262,7 +237,7 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
                                 arg.span,
                                 "using a reference to `Cow` is not recommended.",
                                 |db| {
-                                    db.span_suggestion_with_applicability(
+                                    db.span_suggestion(
                                         arg.span,
                                         "change this to",
                                         "&".to_owned() + &r,
@@ -277,15 +252,16 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
         }
     }
 
-    if let FunctionRetTy::Return(ref ty) = decl.output {
-        if let Some((out, MutMutable, _)) = get_rptr_lm(ty) {
+    if let FnRetTy::Return(ref ty) = decl.output {
+        if let Some((out, Mutability::Mut, _)) = get_rptr_lm(ty) {
             let mut immutables = vec![];
-            for (_, ref mutbl, ref argspan) in decl.inputs
+            for (_, ref mutbl, ref argspan) in decl
+                .inputs
                 .iter()
                 .filter_map(|ty| get_rptr_lm(ty))
                 .filter(|&(lt, _, _)| lt.name == out.name)
             {
-                if *mutbl == MutMutable {
+                if *mutbl == Mutability::Mut {
                     return;
                 }
                 immutables.push(*argspan);
@@ -293,26 +269,32 @@ fn check_fn(cx: &LateContext<'_, '_>, decl: &FnDecl, fn_id: NodeId, opt_body_id:
             if immutables.is_empty() {
                 return;
             }
-            span_lint_and_then(cx, MUT_FROM_REF, ty.span, "mutable borrow from immutable input(s)", |db| {
-                let ms = MultiSpan::from_spans(immutables);
-                db.span_note(ms, "immutable borrow here");
-            });
+            span_lint_and_then(
+                cx,
+                MUT_FROM_REF,
+                ty.span,
+                "mutable borrow from immutable input(s)",
+                |db| {
+                    let ms = MultiSpan::from_spans(immutables);
+                    db.span_note(ms, "immutable borrow here");
+                },
+            );
         }
     }
 }
 
-fn get_rptr_lm(ty: &Ty) -> Option<(&Lifetime, Mutability, Span)> {
-    if let TyKind::Rptr(ref lt, ref m) = ty.node {
+fn get_rptr_lm<'tcx>(ty: &'tcx Ty<'tcx>) -> Option<(&'tcx Lifetime, Mutability, Span)> {
+    if let TyKind::Rptr(ref lt, ref m) = ty.kind {
         Some((lt, m.mutbl, ty.span))
     } else {
         None
     }
 }
 
-fn is_null_path(expr: &Expr) -> bool {
-    if let ExprKind::Call(ref pathexp, ref args) = expr.node {
+fn is_null_path(expr: &Expr<'_>) -> bool {
+    if let ExprKind::Call(ref pathexp, ref args) = expr.kind {
         if args.is_empty() {
-            if let ExprKind::Path(ref path) = pathexp.node {
+            if let ExprKind::Path(ref path) = pathexp.kind {
                 return match_qpath(path, &paths::PTR_NULL) || match_qpath(path, &paths::PTR_NULL_MUT);
             }
         }

@@ -1,14 +1,6 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
+// run-rustfix
 #![allow(unused_mut)]
+#![deny(clippy::get_unwrap)]
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -20,8 +12,12 @@ struct GetFalsePositive {
 }
 
 impl GetFalsePositive {
-    fn get(&self, pos: usize) -> Option<&u32> { self.arr.get(pos) }
-    fn get_mut(&mut self, pos: usize) -> Option<&mut u32> { self.arr.get_mut(pos) }
+    fn get(&self, pos: usize) -> Option<&u32> {
+        self.arr.get(pos)
+    }
+    fn get_mut(&mut self, pos: usize) -> Option<&mut u32> {
+        self.arr.get_mut(pos)
+    }
 }
 
 fn main() {
@@ -33,7 +29,8 @@ fn main() {
     let mut some_btreemap: BTreeMap<u8, char> = BTreeMap::from_iter(vec![(1, 'a'), (2, 'b')]);
     let mut false_positive = GetFalsePositive { arr: [0, 1, 2] };
 
-    { // Test `get().unwrap()`
+    {
+        // Test `get().unwrap()`
         let _ = boxed_slice.get(1).unwrap();
         let _ = some_slice.get(0).unwrap();
         let _ = some_vec.get(0).unwrap();
@@ -41,9 +38,12 @@ fn main() {
         let _ = some_hashmap.get(&1).unwrap();
         let _ = some_btreemap.get(&1).unwrap();
         let _ = false_positive.get(0).unwrap();
+        // Test with deref
+        let _: u8 = *boxed_slice.get(1).unwrap();
     }
 
-    { // Test `get_mut().unwrap()`
+    {
+        // Test `get_mut().unwrap()`
         *boxed_slice.get_mut(0).unwrap() = 1;
         *some_slice.get_mut(0).unwrap() = 1;
         *some_vec.get_mut(0).unwrap() = 1;
@@ -54,7 +54,8 @@ fn main() {
         *false_positive.get_mut(0).unwrap() = 1;
     }
 
-    { // Test `get().unwrap().foo()` and `get_mut().unwrap().bar()`
+    {
+        // Test `get().unwrap().foo()` and `get_mut().unwrap().bar()`
         let _ = some_vec.get(0..1).unwrap().to_vec();
         let _ = some_vec.get_mut(0..1).unwrap().to_vec();
     }

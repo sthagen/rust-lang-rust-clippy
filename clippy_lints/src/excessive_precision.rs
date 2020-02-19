@@ -1,133 +1,106 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::hir;
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::ty::TyKind;
-use std::f32;
-use std::f64;
-use std::fmt;
-use crate::syntax::ast::*;
-use crate::syntax_pos::symbol::Symbol;
 use crate::utils::span_lint_and_sugg;
+use crate::utils::sugg::format_numeric_literal;
+use if_chain::if_chain;
+use rustc::ty;
+use rustc_errors::Applicability;
+use rustc_hir as hir;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use std::{f32, f64, fmt};
+use syntax::ast::*;
 
-/// **What it does:** Checks for float literals with a precision greater
-/// than that supported by the underlying type
-///
-/// **Why is this bad?** Rust will truncate the literal silently.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-///
-/// ```rust
-/// // Bad
-///    let v: f32 = 0.123_456_789_9;
-///    println!("{}", v); //  0.123_456_789
-///
-/// // Good
-///    let v: f64 = 0.123_456_789_9;
-///    println!("{}", v); //  0.123_456_789_9
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for float literals with a precision greater
+    /// than that supported by the underlying type.
+    ///
+    /// **Why is this bad?** Rust will silently lose precision during conversion
+    /// to a float.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    ///
+    /// ```rust
+    /// // Bad
+    /// let a: f32 = 0.123_456_789_9; // 0.123_456_789
+    /// let b: f32 = 16_777_217.0; // 16_777_216.0
+    ///
+    /// // Good
+    /// let a: f64 = 0.123_456_789_9;
+    /// let b: f64 = 16_777_216.0;
+    /// ```
     pub EXCESSIVE_PRECISION,
-    style,
+    correctness,
     "excessive precision for float literal"
 }
 
-pub struct ExcessivePrecision;
-
-impl LintPass for ExcessivePrecision {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(EXCESSIVE_PRECISION)
-    }
-}
+declare_lint_pass!(ExcessivePrecision => [EXCESSIVE_PRECISION]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for ExcessivePrecision {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr) {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr<'_>) {
         if_chain! {
             let ty = cx.tables.expr_ty(expr);
-            if let TyKind::Float(fty) = ty.sty;
-            if let hir::ExprKind::Lit(ref lit) = expr.node;
-            if let LitKind::Float(sym, _) | LitKind::FloatUnsuffixed(sym) = lit.node;
-            if let Some(sugg) = self.check(sym, fty);
+            if let ty::Float(fty) = ty.kind;
+            if let hir::ExprKind::Lit(ref lit) = expr.kind;
+            if let LitKind::Float(sym, lit_float_ty) = lit.node;
             then {
-                span_lint_and_sugg(
-                    cx,
-                    EXCESSIVE_PRECISION,
-                    expr.span,
-                    "float has excessive precision",
-                    "consider changing the type or truncating it to",
-                    sugg,
-                );
+                let sym_str = sym.as_str();
+                let formatter = FloatFormat::new(&sym_str);
+                // Try to bail out if the float is for sure fine.
+                // If its within the 2 decimal digits of being out of precision we
+                // check if the parsed representation is the same as the string
+                // since we'll need the truncated string anyway.
+                let digits = count_digits(&sym_str);
+                let max = max_digits(fty);
+                let float_str = match fty {
+                    FloatTy::F32 => sym_str.parse::<f32>().map(|f| formatter.format(f)),
+                    FloatTy::F64 => sym_str.parse::<f64>().map(|f| formatter.format(f)),
+                }.unwrap();
+                let type_suffix = match lit_float_ty {
+                    LitFloatType::Suffixed(FloatTy::F32) => Some("f32"),
+                    LitFloatType::Suffixed(FloatTy::F64) => Some("f64"),
+                    _ => None
+                };
+
+                if is_whole_number(&sym_str, fty) {
+                    // Normalize the literal by stripping the fractional portion
+                    if sym_str.split('.').next().unwrap() != float_str {
+                        span_lint_and_sugg(
+                            cx,
+                            EXCESSIVE_PRECISION,
+                            expr.span,
+                            "literal cannot be represented as the underlying type without loss of precision",
+                            "consider changing the type or replacing it with",
+                            format_numeric_literal(format!("{}.0", float_str).as_str(), type_suffix, true),
+                            Applicability::MachineApplicable,
+                        );
+                    }
+                } else if digits > max as usize && sym_str != float_str {
+                    span_lint_and_sugg(
+                        cx,
+                        EXCESSIVE_PRECISION,
+                        expr.span,
+                        "float has excessive precision",
+                        "consider changing the type or truncating it to",
+                        format_numeric_literal(&float_str, type_suffix, true),
+                        Applicability::MachineApplicable,
+                    );
+                }
             }
         }
     }
 }
 
-impl ExcessivePrecision {
-    // None if nothing to lint, Some(suggestion) if lint necessary
-    fn check(&self, sym: Symbol, fty: FloatTy) -> Option<String> {
-        let max = max_digits(fty);
-        let sym_str = sym.as_str();
-        if dot_zero_exclusion(&sym_str) {
-            return None
-        }
-        // Try to bail out if the float is for sure fine.
-        // If its within the 2 decimal digits of being out of precision we
-        // check if the parsed representation is the same as the string
-        // since we'll need the truncated string anyway.
-        let digits = count_digits(&sym_str);
-        if digits > max as usize {
-            let formatter = FloatFormat::new(&sym_str);
-            let sr = match fty {
-                FloatTy::F32 => sym_str.parse::<f32>().map(|f| formatter.format(f)),
-                FloatTy::F64 => sym_str.parse::<f64>().map(|f| formatter.format(f)),
-            };
-            // We know this will parse since we are in LatePass
-            let s = sr.unwrap();
-
-            if sym_str == s {
-                None
-            } else {
-                let di = super::literal_representation::DigitInfo::new(&s, true);
-                Some(di.grouping_hint())
-            }
-        } else {
-            None
-        }
+// Checks whether a float literal is a whole number
+#[must_use]
+fn is_whole_number(sym_str: &str, fty: FloatTy) -> bool {
+    match fty {
+        FloatTy::F32 => sym_str.parse::<f32>().unwrap().fract() == 0.0,
+        FloatTy::F64 => sym_str.parse::<f64>().unwrap().fract() == 0.0,
     }
 }
 
-#[allow(clippy::doc_markdown)]
-/// Should we exclude the float because it has a `.0` or `.` suffix
-/// Ex 1_000_000_000.0
-/// Ex 1_000_000_000.
-fn dot_zero_exclusion(s: &str) -> bool {
-    if let Some(after_dec) = s.split('.').nth(1) {
-        let mut decpart = after_dec
-            .chars()
-            .take_while(|c| *c != 'e' || *c != 'E');
-
-        match decpart.next() {
-            Some('0') => decpart.count() == 0,
-            Some(_) => false,
-            None => true,
-        }
-    } else {
-        false
-    }
-}
-
+#[must_use]
 fn max_digits(fty: FloatTy) -> u32 {
     match fty {
         FloatTy::F32 => f32::DIGITS,
@@ -136,6 +109,7 @@ fn max_digits(fty: FloatTy) -> u32 {
 }
 
 /// Counts the digits excluding leading zeros
+#[must_use]
 fn count_digits(s: &str) -> usize {
     // Note that s does not contain the f32/64 suffix, and underscores have been stripped
     s.chars()
@@ -157,21 +131,24 @@ enum FloatFormat {
     Normal,
 }
 impl FloatFormat {
+    #[must_use]
     fn new(s: &str) -> Self {
         s.chars()
             .find_map(|x| match x {
-                'e' => Some(FloatFormat::LowerExp),
-                'E' => Some(FloatFormat::UpperExp),
+                'e' => Some(Self::LowerExp),
+                'E' => Some(Self::UpperExp),
                 _ => None,
             })
-            .unwrap_or(FloatFormat::Normal)
+            .unwrap_or(Self::Normal)
     }
     fn format<T>(&self, f: T) -> String
-    where T: fmt::UpperExp + fmt::LowerExp + fmt::Display {
+    where
+        T: fmt::UpperExp + fmt::LowerExp + fmt::Display,
+    {
         match self {
-            FloatFormat::LowerExp => format!("{:e}", f),
-            FloatFormat::UpperExp => format!("{:E}", f),
-            FloatFormat::Normal => format!("{}", f),
+            Self::LowerExp => format!("{:e}", f),
+            Self::UpperExp => format!("{:E}", f),
+            Self::Normal => format!("{}", f),
         }
     }
 }

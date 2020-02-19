@@ -1,40 +1,33 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use std::borrow::Cow;
-use crate::rustc::hir::*;
-use crate::rustc::hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
-use crate::rustc::lint::LateContext;
-use crate::syntax::ast::Name;
-use crate::syntax::source_map::Span;
 use crate::utils::{get_pat_name, match_var, snippet};
+use rustc::hir::map::Map;
+use rustc_hir::intravisit::{walk_expr, NestedVisitorMap, Visitor};
+use rustc_hir::*;
+use rustc_lint::LateContext;
+use rustc_span::source_map::Span;
+use std::borrow::Cow;
+use syntax::ast::Name;
 
 pub fn get_spans(
     cx: &LateContext<'_, '_>,
     opt_body_id: Option<BodyId>,
     idx: usize,
-    replacements: &'static [(&'static str, &'static str)],
+    replacements: &[(&'static str, &'static str)],
 ) -> Option<Vec<(Span, Cow<'static, str>)>> {
-    if let Some(body) = opt_body_id.map(|id| cx.tcx.hir.body(id)) {
-        get_binding_name(&body.arguments[idx])
-            .map_or_else(|| Some(vec![]), |name| extract_clone_suggestions(cx, name, replacements, body))
+    if let Some(body) = opt_body_id.map(|id| cx.tcx.hir().body(id)) {
+        get_binding_name(&body.params[idx]).map_or_else(
+            || Some(vec![]),
+            |name| extract_clone_suggestions(cx, name, replacements, body),
+        )
     } else {
         Some(vec![])
     }
 }
 
-fn extract_clone_suggestions<'a, 'tcx: 'a>(
+fn extract_clone_suggestions<'a, 'tcx>(
     cx: &LateContext<'a, 'tcx>,
     name: Name,
-    replace: &'static [(&'static str, &'static str)],
-    body: &'tcx Body,
+    replace: &[(&'static str, &'static str)],
+    body: &'tcx Body<'_>,
 ) -> Option<Vec<(Span, Cow<'static, str>)>> {
     let mut visitor = PtrCloneVisitor {
         cx,
@@ -51,27 +44,29 @@ fn extract_clone_suggestions<'a, 'tcx: 'a>(
     }
 }
 
-struct PtrCloneVisitor<'a, 'tcx: 'a> {
+struct PtrCloneVisitor<'a, 'tcx> {
     cx: &'a LateContext<'a, 'tcx>,
     name: Name,
-    replace: &'static [(&'static str, &'static str)],
+    replace: &'a [(&'static str, &'static str)],
     spans: Vec<(Span, Cow<'static, str>)>,
     abort: bool,
 }
 
-impl<'a, 'tcx: 'a> Visitor<'tcx> for PtrCloneVisitor<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx Expr) {
+impl<'a, 'tcx> Visitor<'tcx> for PtrCloneVisitor<'a, 'tcx> {
+    type Map = Map<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx Expr<'_>) {
         if self.abort {
             return;
         }
-        if let ExprKind::MethodCall(ref seg, _, ref args) = expr.node {
+        if let ExprKind::MethodCall(ref seg, _, ref args) = expr.kind {
             if args.len() == 1 && match_var(&args[0], self.name) {
-                if seg.ident.name == "capacity" {
+                if seg.ident.name.as_str() == "capacity" {
                     self.abort = true;
                     return;
                 }
                 for &(fn_name, suffix) in self.replace {
-                    if seg.ident.name == fn_name {
+                    if seg.ident.name.as_str() == fn_name {
                         self.spans
                             .push((expr.span, snippet(self.cx, args[0].span, "_") + suffix));
                         return;
@@ -83,11 +78,11 @@ impl<'a, 'tcx: 'a> Visitor<'tcx> for PtrCloneVisitor<'a, 'tcx> {
         walk_expr(self, expr);
     }
 
-    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
+    fn nested_visit_map(&mut self) -> NestedVisitorMap<'_, Self::Map> {
         NestedVisitorMap::None
     }
 }
 
-fn get_binding_name(arg: &Arg) -> Option<Name> {
+fn get_binding_name(arg: &Param<'_>) -> Option<Name> {
     get_pat_name(&arg.pat)
 }

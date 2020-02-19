@@ -1,26 +1,20 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-
 #![warn(clippy::all)]
 #![allow(unused_variables)]
 #![allow(unused_assignments)]
 #![allow(clippy::if_same_then_else)]
 #![allow(clippy::deref_addrof)]
 
-fn foo() -> bool { true }
+fn foo() -> bool {
+    true
+}
 
+#[rustfmt::skip]
 fn main() {
-    // weird `else if` formatting:
+    // weird `else` formatting:
+    if foo() {
+    } {
+    }
+
     if foo() {
     } if foo() {
     }
@@ -47,6 +41,17 @@ fn main() {
 
     if foo() {
     } else
+    {
+    }
+
+    if foo() {
+    }
+    else
+    {
+    }
+
+    if foo() {
+    } else
     if foo() { // the span of the above error should continue here
     }
 
@@ -57,6 +62,20 @@ fn main() {
     }
 
     // those are ok:
+    if foo() {
+    }
+    {
+    }
+
+    if foo() {
+    } else {
+    }
+
+    if foo() {
+    }
+    else {
+    }
+
     if foo() {
     }
     if foo() {
@@ -111,5 +130,28 @@ fn main() {
     let _ = &[
         1 + 2, 3 +
         4, 5 + 6,
+    ];
+
+    // don't lint for bin op without unary equiv
+    // issue 3244
+    vec![
+        1
+        / 2,
+    ];
+    // issue 3396
+    vec![
+        true
+        | false,
+    ];
+
+    // don't lint if the indentation suggests not to
+    let _ = &[
+        1 + 2, 3 
+                - 4, 5
+    ];
+    // lint if it doesnt
+    let _ = &[
+        -1
+        -4,
     ];
 }

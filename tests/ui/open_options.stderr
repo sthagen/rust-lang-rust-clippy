@@ -1,45 +1,45 @@
-error: file opened with "truncate" and "read"
-  --> $DIR/open_options.rs:18:5
+error: file opened with `truncate` and `read`
+  --> $DIR/open_options.rs:6:5
    |
-18 |     OpenOptions::new().read(true).truncate(true).open("foo.txt");
+LL |     OpenOptions::new().read(true).truncate(true).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: `-D clippy::nonsensical-open-options` implied by `-D warnings`
 
-error: file opened with "append" and "truncate"
-  --> $DIR/open_options.rs:19:5
+error: file opened with `append` and `truncate`
+  --> $DIR/open_options.rs:7:5
    |
-19 |     OpenOptions::new().append(true).truncate(true).open("foo.txt");
+LL |     OpenOptions::new().append(true).truncate(true).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: the method "read" is called more than once
-  --> $DIR/open_options.rs:21:5
+error: the method `read` is called more than once
+  --> $DIR/open_options.rs:9:5
    |
-21 |     OpenOptions::new().read(true).read(false).open("foo.txt");
+LL |     OpenOptions::new().read(true).read(false).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: the method "create" is called more than once
-  --> $DIR/open_options.rs:22:5
+error: the method `create` is called more than once
+  --> $DIR/open_options.rs:10:5
    |
-22 |     OpenOptions::new().create(true).create(false).open("foo.txt");
+LL |     OpenOptions::new().create(true).create(false).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: the method "write" is called more than once
-  --> $DIR/open_options.rs:23:5
+error: the method `write` is called more than once
+  --> $DIR/open_options.rs:11:5
    |
-23 |     OpenOptions::new().write(true).write(false).open("foo.txt");
+LL |     OpenOptions::new().write(true).write(false).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: the method "append" is called more than once
-  --> $DIR/open_options.rs:24:5
+error: the method `append` is called more than once
+  --> $DIR/open_options.rs:12:5
    |
-24 |     OpenOptions::new().append(true).append(false).open("foo.txt");
+LL |     OpenOptions::new().append(true).append(false).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: the method "truncate" is called more than once
-  --> $DIR/open_options.rs:25:5
+error: the method `truncate` is called more than once
+  --> $DIR/open_options.rs:13:5
    |
-25 |     OpenOptions::new().truncate(true).truncate(false).open("foo.txt");
+LL |     OpenOptions::new().truncate(true).truncate(false).open("foo.txt");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: aborting due to 7 previous errors

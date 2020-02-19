@@ -1,59 +1,61 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::hir;
-use crate::rustc::hir::def::Def;
 use crate::utils::{match_def_path, span_lint_and_sugg};
+use if_chain::if_chain;
+use rustc_errors::Applicability;
+use rustc_hir::def::{DefKind, Res};
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
 
-/// **What it does:** Checks for usage of `ATOMIC_X_INIT`, `ONCE_INIT`, and
-/// `uX/iX::MIN/MAX`.
-///
-/// **Why is this bad?** `const fn`s exist
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// static FOO: AtomicIsize = ATOMIC_ISIZE_INIT;
-/// ```
-///
-/// Could be written:
-///
-/// ```rust
-/// static FOO: AtomicIsize = AtomicIsize::new(0);
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for usage of standard library
+    /// `const`s that could be replaced by `const fn`s.
+    ///
+    /// **Why is this bad?** `const fn`s exist
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust
+    /// let x = std::u32::MIN;
+    /// let y = std::u32::MAX;
+    /// ```
+    ///
+    /// Could be written:
+    ///
+    /// ```rust
+    /// let x = u32::min_value();
+    /// let y = u32::max_value();
+    /// ```
     pub REPLACE_CONSTS,
     pedantic,
     "Lint usages of standard library `const`s that could be replaced by `const fn`s"
 }
 
-pub struct ReplaceConsts;
+declare_lint_pass!(ReplaceConsts => [REPLACE_CONSTS]);
 
-impl LintPass for ReplaceConsts {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(REPLACE_CONSTS)
+fn in_pattern(cx: &LateContext<'_, '_>, expr: &Expr<'_>) -> bool {
+    let map = &cx.tcx.hir();
+    let parent_id = map.get_parent_node(expr.hir_id);
+
+    if let Some(node) = map.find(parent_id) {
+        if let Node::Pat(_) = node {
+            return true;
+        }
     }
+
+    false
 }
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for ReplaceConsts {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx hir::Expr) {
+    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
         if_chain! {
-            if let hir::ExprKind::Path(ref qp) = expr.node;
-            if let Def::Const(def_id) = cx.tables.qpath_def(qp, expr.hir_id);
+            if let ExprKind::Path(ref qp) = expr.kind;
+            if let Res::Def(DefKind::Const, def_id) = cx.tables.qpath_res(qp, expr.hir_id);
+            // Do not lint within patterns as function calls are disallowed in them
+            if !in_pattern(cx, expr);
             then {
-                for &(const_path, repl_snip) in REPLACEMENTS {
-                    if match_def_path(cx.tcx, def_id, const_path) {
+                for &(ref const_path, repl_snip) in &REPLACEMENTS {
+                    if match_def_path(cx, def_id, const_path) {
                         span_lint_and_sugg(
                             cx,
                             REPLACE_CONSTS,
@@ -61,6 +63,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for ReplaceConsts {
                             &format!("using `{}`", const_path.last().expect("empty path")),
                             "try this",
                             repl_snip.to_string(),
+                            Applicability::MachineApplicable,
                         );
                         return;
                     }
@@ -70,45 +73,31 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for ReplaceConsts {
     }
 }
 
-const REPLACEMENTS: &[(&[&str], &str)] = &[
-    // Once
-    (&["core", "sync",  "ONCE_INIT"], "Once::new()"),
-    // Atomic
-    (&["core", "sync", "atomic", "ATOMIC_BOOL_INIT"],  "AtomicBool::new(false)"),
-    (&["core", "sync", "atomic", "ATOMIC_ISIZE_INIT"], "AtomicIsize::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_I8_INIT"],    "AtomicI8::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_I16_INIT"],   "AtomicI16::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_I32_INIT"],   "AtomicI32::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_I64_INIT"],   "AtomicI64::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_USIZE_INIT"], "AtomicUsize::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_U8_INIT"],    "AtomicU8::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_U16_INIT"],   "AtomicU16::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_U32_INIT"],   "AtomicU32::new(0)"),
-    (&["core", "sync", "atomic", "ATOMIC_U64_INIT"],   "AtomicU64::new(0)"),
+const REPLACEMENTS: [([&str; 3], &str); 24] = [
     // Min
-    (&["core", "isize", "MIN"], "isize::min_value()"),
-    (&["core", "i8",    "MIN"], "i8::min_value()"),
-    (&["core", "i16",   "MIN"], "i16::min_value()"),
-    (&["core", "i32",   "MIN"], "i32::min_value()"),
-    (&["core", "i64",   "MIN"], "i64::min_value()"),
-    (&["core", "i128",  "MIN"], "i128::min_value()"),
-    (&["core", "usize", "MIN"], "usize::min_value()"),
-    (&["core", "u8",    "MIN"], "u8::min_value()"),
-    (&["core", "u16",   "MIN"], "u16::min_value()"),
-    (&["core", "u32",   "MIN"], "u32::min_value()"),
-    (&["core", "u64",   "MIN"], "u64::min_value()"),
-    (&["core", "u128",  "MIN"], "u128::min_value()"),
+    (["core", "isize", "MIN"], "isize::min_value()"),
+    (["core", "i8", "MIN"], "i8::min_value()"),
+    (["core", "i16", "MIN"], "i16::min_value()"),
+    (["core", "i32", "MIN"], "i32::min_value()"),
+    (["core", "i64", "MIN"], "i64::min_value()"),
+    (["core", "i128", "MIN"], "i128::min_value()"),
+    (["core", "usize", "MIN"], "usize::min_value()"),
+    (["core", "u8", "MIN"], "u8::min_value()"),
+    (["core", "u16", "MIN"], "u16::min_value()"),
+    (["core", "u32", "MIN"], "u32::min_value()"),
+    (["core", "u64", "MIN"], "u64::min_value()"),
+    (["core", "u128", "MIN"], "u128::min_value()"),
     // Max
-    (&["core", "isize", "MAX"], "isize::max_value()"),
-    (&["core", "i8",    "MAX"], "i8::max_value()"),
-    (&["core", "i16",   "MAX"], "i16::max_value()"),
-    (&["core", "i32",   "MAX"], "i32::max_value()"),
-    (&["core", "i64",   "MAX"], "i64::max_value()"),
-    (&["core", "i128",  "MAX"], "i128::max_value()"),
-    (&["core", "usize", "MAX"], "usize::max_value()"),
-    (&["core", "u8",    "MAX"], "u8::max_value()"),
-    (&["core", "u16",   "MAX"], "u16::max_value()"),
-    (&["core", "u32",   "MAX"], "u32::max_value()"),
-    (&["core", "u64",   "MAX"], "u64::max_value()"),
-    (&["core", "u128",  "MAX"], "u128::max_value()"),
+    (["core", "isize", "MAX"], "isize::max_value()"),
+    (["core", "i8", "MAX"], "i8::max_value()"),
+    (["core", "i16", "MAX"], "i16::max_value()"),
+    (["core", "i32", "MAX"], "i32::max_value()"),
+    (["core", "i64", "MAX"], "i64::max_value()"),
+    (["core", "i128", "MAX"], "i128::max_value()"),
+    (["core", "usize", "MAX"], "usize::max_value()"),
+    (["core", "u8", "MAX"], "u8::max_value()"),
+    (["core", "u16", "MAX"], "u16::max_value()"),
+    (["core", "u32", "MAX"], "u32::max_value()"),
+    (["core", "u64", "MAX"], "u64::max_value()"),
+    (["core", "u128", "MAX"], "u128::max_value()"),
 ];

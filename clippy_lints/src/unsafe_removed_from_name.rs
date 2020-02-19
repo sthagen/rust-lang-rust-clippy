@@ -1,52 +1,36 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use crate::syntax::ast::*;
-use crate::syntax::source_map::Span;
-use crate::syntax::symbol::LocalInternedString;
 use crate::utils::span_lint;
+use rustc_lint::{EarlyContext, EarlyLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
+use rustc_span::symbol::SymbolStr;
+use syntax::ast::*;
 
-/// **What it does:** Checks for imports that remove "unsafe" from an item's
-/// name.
-///
-/// **Why is this bad?** Renaming makes it less clear which traits and
-/// structures are unsafe.
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust,ignore
-/// use std::cell::{UnsafeCell as TotallySafeCell};
-///
-/// extern crate crossbeam;
-/// use crossbeam::{spawn_unsafe as spawn};
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for imports that remove "unsafe" from an item's
+    /// name.
+    ///
+    /// **Why is this bad?** Renaming makes it less clear which traits and
+    /// structures are unsafe.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```rust,ignore
+    /// use std::cell::{UnsafeCell as TotallySafeCell};
+    ///
+    /// extern crate crossbeam;
+    /// use crossbeam::{spawn_unsafe as spawn};
+    /// ```
     pub UNSAFE_REMOVED_FROM_NAME,
     style,
     "`unsafe` removed from API names on import"
 }
 
-pub struct UnsafeNameRemoval;
-
-impl LintPass for UnsafeNameRemoval {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(UNSAFE_REMOVED_FROM_NAME)
-    }
-}
+declare_lint_pass!(UnsafeNameRemoval => [UNSAFE_REMOVED_FROM_NAME]);
 
 impl EarlyLintPass for UnsafeNameRemoval {
     fn check_item(&mut self, cx: &EarlyContext<'_>, item: &Item) {
-        if let ItemKind::Use(ref use_tree) = item.node {
+        if let ItemKind::Use(ref use_tree) = item.kind {
             check_use_tree(use_tree, cx, item.span);
         }
     }
@@ -62,14 +46,13 @@ fn check_use_tree(use_tree: &UseTree, cx: &EarlyContext<'_>, span: Span) {
                 .expect("use paths cannot be empty")
                 .ident;
             unsafe_to_safe_check(old_name, new_name, cx, span);
-        }
-        UseTreeKind::Simple(None, ..) |
-        UseTreeKind::Glob => {},
+        },
+        UseTreeKind::Simple(None, ..) | UseTreeKind::Glob => {},
         UseTreeKind::Nested(ref nested_use_tree) => {
             for &(ref use_tree, _) in nested_use_tree {
                 check_use_tree(use_tree, cx, span);
             }
-        }
+        },
     }
 }
 
@@ -81,11 +64,15 @@ fn unsafe_to_safe_check(old_name: Ident, new_name: Ident, cx: &EarlyContext<'_>,
             cx,
             UNSAFE_REMOVED_FROM_NAME,
             span,
-            &format!("removed \"unsafe\" from the name of `{}` in use as `{}`", old_str, new_str),
+            &format!(
+                "removed `unsafe` from the name of `{}` in use as `{}`",
+                old_str, new_str
+            ),
         );
     }
 }
 
-fn contains_unsafe(name: &LocalInternedString) -> bool {
+#[must_use]
+fn contains_unsafe(name: &SymbolStr) -> bool {
     name.contains("Unsafe") || name.contains("unsafe")
 }

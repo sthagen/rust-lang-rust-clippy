@@ -1,89 +1,77 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-use crate::rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
-use crate::rustc::{declare_tool_lint, lint_array};
-use if_chain::if_chain;
-use crate::rustc::ty::{self, Ty};
-use crate::rustc::hir::*;
-use crate::syntax::source_map::Span;
 use crate::utils::paths;
 use crate::utils::{is_automatically_derived, is_copy, match_path, span_lint_and_then};
+use if_chain::if_chain;
+use rustc::ty::{self, Ty};
+use rustc_hir::*;
+use rustc_lint::{LateContext, LateLintPass};
+use rustc_session::{declare_lint_pass, declare_tool_lint};
+use rustc_span::source_map::Span;
 
-/// **What it does:** Checks for deriving `Hash` but implementing `PartialEq`
-/// explicitly or vice versa.
-///
-/// **Why is this bad?** The implementation of these traits must agree (for
-/// example for use with `HashMap`) so it’s probably a bad idea to use a
-/// default-generated `Hash` implementation with an explicitly defined
-/// `PartialEq`. In particular, the following must hold for any type:
-///
-/// ```rust
-/// k1 == k2 ⇒ hash(k1) == hash(k2)
-/// ```
-///
-/// **Known problems:** None.
-///
-/// **Example:**
-/// ```rust
-/// #[derive(Hash)]
-/// struct Foo;
-///
-/// impl PartialEq for Foo {
-///     ...
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for deriving `Hash` but implementing `PartialEq`
+    /// explicitly or vice versa.
+    ///
+    /// **Why is this bad?** The implementation of these traits must agree (for
+    /// example for use with `HashMap`) so it’s probably a bad idea to use a
+    /// default-generated `Hash` implementation with an explicitly defined
+    /// `PartialEq`. In particular, the following must hold for any type:
+    ///
+    /// ```text
+    /// k1 == k2 ⇒ hash(k1) == hash(k2)
+    /// ```
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    /// ```ignore
+    /// #[derive(Hash)]
+    /// struct Foo;
+    ///
+    /// impl PartialEq for Foo {
+    ///     ...
+    /// }
+    /// ```
     pub DERIVE_HASH_XOR_EQ,
     correctness,
     "deriving `Hash` but implementing `PartialEq` explicitly"
 }
 
-/// **What it does:** Checks for explicit `Clone` implementations for `Copy`
-/// types.
-///
-/// **Why is this bad?** To avoid surprising behaviour, these traits should
-/// agree and the behaviour of `Copy` cannot be overridden. In almost all
-/// situations a `Copy` type should have a `Clone` implementation that does
-/// nothing more than copy the object, which is what `#[derive(Copy, Clone)]`
-/// gets you.
-///
-/// **Known problems:** Bounds of generic types are sometimes wrong: https://github.com/rust-lang/rust/issues/26925
-///
-/// **Example:**
-/// ```rust
-/// #[derive(Copy)]
-/// struct Foo;
-///
-/// impl Clone for Foo {
-///     ..
-/// }
-/// ```
 declare_clippy_lint! {
+    /// **What it does:** Checks for explicit `Clone` implementations for `Copy`
+    /// types.
+    ///
+    /// **Why is this bad?** To avoid surprising behaviour, these traits should
+    /// agree and the behaviour of `Copy` cannot be overridden. In almost all
+    /// situations a `Copy` type should have a `Clone` implementation that does
+    /// nothing more than copy the object, which is what `#[derive(Copy, Clone)]`
+    /// gets you.
+    ///
+    /// **Known problems:** Bounds of generic types are sometimes wrong: https://github.com/rust-lang/rust/issues/26925
+    ///
+    /// **Example:**
+    /// ```rust,ignore
+    /// #[derive(Copy)]
+    /// struct Foo;
+    ///
+    /// impl Clone for Foo {
+    ///     // ..
+    /// }
+    /// ```
     pub EXPL_IMPL_CLONE_ON_COPY,
     pedantic,
     "implementing `Clone` explicitly on `Copy` types"
 }
 
-pub struct Derive;
-
-impl LintPass for Derive {
-    fn get_lints(&self) -> LintArray {
-        lint_array!(EXPL_IMPL_CLONE_ON_COPY, DERIVE_HASH_XOR_EQ)
-    }
-}
+declare_lint_pass!(Derive => [EXPL_IMPL_CLONE_ON_COPY, DERIVE_HASH_XOR_EQ]);
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Derive {
-    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item) {
-        if let ItemKind::Impl(_, _, _, _, Some(ref trait_ref), _, _) = item.node {
-            let ty = cx.tcx.type_of(cx.tcx.hir.local_def_id(item.id));
+    fn check_item(&mut self, cx: &LateContext<'a, 'tcx>, item: &'tcx Item<'_>) {
+        if let ItemKind::Impl {
+            of_trait: Some(ref trait_ref),
+            ..
+        } = item.kind
+        {
+            let ty = cx.tcx.type_of(cx.tcx.hir().local_def_id(item.hir_id));
             let is_automatically_derived = is_automatically_derived(&*item.attrs);
 
             check_hash_peq(cx, item.span, trait_ref, ty, is_automatically_derived);
@@ -99,13 +87,14 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for Derive {
 fn check_hash_peq<'a, 'tcx>(
     cx: &LateContext<'a, 'tcx>,
     span: Span,
-    trait_ref: &TraitRef,
+    trait_ref: &TraitRef<'_>,
     ty: Ty<'tcx>,
     hash_is_automatically_derived: bool,
 ) {
     if_chain! {
         if match_path(&trait_ref.path, &paths::HASH);
         if let Some(peq_trait_def_id) = cx.tcx.lang_items().eq_trait();
+        if !&trait_ref.trait_def_id().is_local();
         then {
             // Look for the PartialEq implementations for `ty`
             cx.tcx.for_each_relevant_impl(peq_trait_def_id, ty, |impl_id| {
@@ -130,9 +119,9 @@ fn check_hash_peq<'a, 'tcx>(
                         cx, DERIVE_HASH_XOR_EQ, span,
                         mess,
                         |db| {
-                        if let Some(node_id) = cx.tcx.hir.as_local_node_id(impl_id) {
+                        if let Some(node_id) = cx.tcx.hir().as_local_hir_id(impl_id) {
                             db.span_note(
-                                cx.tcx.hir.span(node_id),
+                                cx.tcx.hir().span(node_id),
                                 "`PartialEq` implemented here"
                             );
                         }
@@ -144,26 +133,28 @@ fn check_hash_peq<'a, 'tcx>(
 }
 
 /// Implementation of the `EXPL_IMPL_CLONE_ON_COPY` lint.
-fn check_copy_clone<'a, 'tcx>(cx: &LateContext<'a, 'tcx>, item: &Item, trait_ref: &TraitRef, ty: Ty<'tcx>) {
+fn check_copy_clone<'a, 'tcx>(cx: &LateContext<'a, 'tcx>, item: &Item<'_>, trait_ref: &TraitRef<'_>, ty: Ty<'tcx>) {
     if match_path(&trait_ref.path, &paths::CLONE_TRAIT) {
         if !is_copy(cx, ty) {
             return;
         }
 
-        match ty.sty {
+        match ty.kind {
             ty::Adt(def, _) if def.is_union() => return,
 
             // Some types are not Clone by default but could be cloned “by hand” if necessary
-            ty::Adt(def, substs) => for variant in &def.variants {
-                for field in &variant.fields {
-                    if let ty::FnDef(..) = field.ty(cx.tcx, substs).sty {
-                        return;
-                    }
-                }
-                for subst in substs {
-                    if let ty::subst::UnpackedKind::Type(subst) = subst.unpack() {
-                        if let ty::Param(_) = subst.sty {
+            ty::Adt(def, substs) => {
+                for variant in &def.variants {
+                    for field in &variant.fields {
+                        if let ty::FnDef(..) = field.ty(cx.tcx, substs).kind {
                             return;
+                        }
+                    }
+                    for subst in substs {
+                        if let ty::subst::GenericArgKind::Type(subst) = subst.unpack() {
+                            if let ty::Param(_) = subst.kind {
+                                return;
+                            }
                         }
                     }
                 }

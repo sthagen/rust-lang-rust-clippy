@@ -1,14 +1,5 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
+// FIXME: Ideally these suggestions would be fixed via rustfix. Blocked by rust-lang/rust#53934
+// // run-rustfix
 
 #![allow(clippy::print_literal)]
 #![warn(clippy::print_with_newline)]
@@ -33,4 +24,28 @@ fn main() {
     print!("Hello {} {}\n\n", "world", "#2");
     println!("\ndon't\nwarn\nfor\nmultiple\nnewlines\n"); // #3126
     println!("\nbla\n\n"); // #3126
+
+    // Escaping
+    print!("\\n"); // #3514
+    print!("\\\n"); // should fail
+    print!("\\\\n");
+
+    // Raw strings
+    print!(r"\n"); // #3778
+
+    // Literal newlines should also fail
+    print!(
+        "
+"
+    );
+    print!(
+        r"
+"
+    );
+
+    // Don't warn on CRLF (#4208)
+    print!("\r\n");
+    print!("foo\r\n");
+    print!("\\r\n"); //~ ERROR
+    print!("foo\rbar\n") // ~ ERROR
 }

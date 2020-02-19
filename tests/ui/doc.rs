@@ -1,24 +1,12 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-
-
-
-//! This file tests for the DOC_MARKDOWN lint
-
-
+//! This file tests for the `DOC_MARKDOWN` lint.
 
 #![allow(dead_code)]
 #![warn(clippy::doc_markdown)]
+#![feature(custom_inner_attributes)]
+#![rustfmt::skip]
 
 /// The foo_bar function does _nothing_. See also foo::bar. (note the dot there)
-/// Markdown is _weird_. I mean _really weird_.  This \_ is ok. So is `_`. But not Foo::some_fun
+/// Markdown is _weird_. I mean _really weird_. This \_ is ok. So is `_`. But not Foo::some_fun
 /// which should be reported only once despite being __doubly bad__.
 /// Here be ::a::global:path.
 /// That's not code ~NotInCodeBlock~.
@@ -62,7 +50,7 @@ fn test_units() {
 }
 
 /// This test has [a link_with_underscores][chunked-example] inside it. See #823.
-/// See also [the issue tracker](https://github.com/rust-lang-nursery/rust-clippy/search?q=clippy::doc_markdown&type=Issues)
+/// See also [the issue tracker](https://github.com/rust-lang/rust-clippy/search?q=clippy::doc_markdown&type=Issues)
 /// on GitHub (which is a camel-cased word, but is OK). And here is another [inline link][inline_link].
 /// It can also be [inline_link2].
 ///
@@ -83,7 +71,7 @@ fn main() {
 }
 
 /// ## CamelCaseThing
-/// Talks about `CamelCaseThing`. Titles should be ignored, see issue #897.
+/// Talks about `CamelCaseThing`. Titles should be ignored; see issue #897.
 ///
 /// # CamelCaseThing
 ///
@@ -119,7 +107,7 @@ fn issue883() {
 fn multiline() {
 }
 
-/** E.g. serialization of an empty list: FooBar
+/** E.g., serialization of an empty list: FooBar
 ```
 That's in a code block: `PackedNode`
 ```
@@ -130,7 +118,7 @@ be_sure_we_got_to_the_end_of_it
 fn issue1073() {
 }
 
-/** E.g. serialization of an empty list: FooBar
+/** E.g., serialization of an empty list: FooBar
 ```
 That's in a code block: PackedNode
 ```
@@ -141,7 +129,7 @@ be_sure_we_got_to_the_end_of_it
 fn issue1073_alt() {
 }
 
-/// Test more than three quotes:
+/// Tests more than three quotes:
 /// ````
 /// DoNotWarn
 /// ```
@@ -154,7 +142,7 @@ fn four_quotes() {
 /// See [NIST SP 800-56A, revision 2].
 ///
 /// [NIST SP 800-56A, revision 2]:
-///     https://github.com/rust-lang-nursery/rust-clippy/issues/902#issuecomment-261919419
+///     https://github.com/rust-lang/rust-clippy/issues/902#issuecomment-261919419
 fn issue_902_comment() {}
 
 #[cfg_attr(feature = "a", doc = " ```")]
@@ -179,3 +167,18 @@ fn issue_1920() {}
 /// Not ok: http://www.unicode.org/
 /// Not ok: http://www.unicode.org/reports/tr9/#Reordering_Resolved_Levels
 fn issue_1832() {}
+
+/// Ok: CamelCase (It should not be surrounded by backticks)
+fn issue_2395() {}
+
+/// An iterator over mycrate::Collection's values.
+/// It should not lint a `'static` lifetime in ticks.
+fn issue_2210() {}
+
+/// This should not cause the lint to trigger:
+/// #REQ-data-family.lint_partof_exists
+fn issue_2343() {}
+
+/// This should not cause an ICE:
+/// __|_ _|__||_|
+fn pulldown_cmark_crash() {}

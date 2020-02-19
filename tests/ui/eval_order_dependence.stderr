@@ -1,51 +1,51 @@
 error: unsequenced read of a variable
-  --> $DIR/eval_order_dependence.rs:18:28
+  --> $DIR/eval_order_dependence.rs:15:9
    |
-18 |     let a = { x = 1; 1 } + x;
-   |                            ^
+LL |     } + x;
+   |         ^
    |
    = note: `-D clippy::eval-order-dependence` implied by `-D warnings`
 note: whether read occurs before this write depends on evaluation order
-  --> $DIR/eval_order_dependence.rs:18:15
+  --> $DIR/eval_order_dependence.rs:13:9
    |
-18 |     let a = { x = 1; 1 } + x;
-   |               ^^^^^
+LL |         x = 1;
+   |         ^^^^^
 
 error: unsequenced read of a variable
-  --> $DIR/eval_order_dependence.rs:21:5
+  --> $DIR/eval_order_dependence.rs:18:5
    |
-21 |     x += { x = 20; 2 };
+LL |     x += {
    |     ^
    |
 note: whether read occurs before this write depends on evaluation order
-  --> $DIR/eval_order_dependence.rs:21:12
+  --> $DIR/eval_order_dependence.rs:19:9
    |
-21 |     x += { x = 20; 2 };
-   |            ^^^^^^
+LL |         x = 20;
+   |         ^^^^^^
 
 error: unsequenced read of a variable
-  --> $DIR/eval_order_dependence.rs:27:24
+  --> $DIR/eval_order_dependence.rs:31:12
    |
-27 |     let foo = Foo { a: x, .. { x = 6; base } };
-   |                        ^
+LL |         a: x,
+   |            ^
    |
 note: whether read occurs before this write depends on evaluation order
-  --> $DIR/eval_order_dependence.rs:27:32
+  --> $DIR/eval_order_dependence.rs:33:13
    |
-27 |     let foo = Foo { a: x, .. { x = 6; base } };
-   |                                ^^^^^
+LL |             x = 6;
+   |             ^^^^^
 
 error: unsequenced read of a variable
-  --> $DIR/eval_order_dependence.rs:31:9
+  --> $DIR/eval_order_dependence.rs:40:9
    |
-31 |         x += { x = 20; 2 };
+LL |         x += {
    |         ^
    |
 note: whether read occurs before this write depends on evaluation order
-  --> $DIR/eval_order_dependence.rs:31:16
+  --> $DIR/eval_order_dependence.rs:41:13
    |
-31 |         x += { x = 20; 2 };
-   |                ^^^^^^
+LL |             x = 20;
+   |             ^^^^^^
 
 error: aborting due to 4 previous errors
 

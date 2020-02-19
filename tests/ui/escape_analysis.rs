@@ -1,22 +1,18 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 #![feature(box_syntax)]
-
-#![allow(clippy::borrowed_box, clippy::needless_pass_by_value, clippy::unused_unit)]
+#![allow(
+    clippy::borrowed_box,
+    clippy::needless_pass_by_value,
+    clippy::unused_unit,
+    clippy::redundant_clone,
+    clippy::match_single_binding
+)]
 #![warn(clippy::boxed_local)]
 
 #[derive(Clone)]
 struct A;
 
 impl A {
-    fn foo(&self){}
+    fn foo(&self) {}
 }
 
 trait Z {
@@ -29,10 +25,9 @@ impl Z for A {
     }
 }
 
-fn main() {
-}
+fn main() {}
 
-fn ok_box_trait(boxed_trait: &Box<Z>) {
+fn ok_box_trait(boxed_trait: &Box<dyn Z>) {
     let boxed_local = boxed_trait;
     // done
 }
@@ -85,10 +80,8 @@ fn nowarn_pass() {
     take_box(&bx); // fn needs &Box
 }
 
-
 fn take_box(x: &Box<A>) {}
 fn take_ref(x: &A) {}
-
 
 fn nowarn_ref_take() {
     // false positive, should actually warn
@@ -100,14 +93,15 @@ fn nowarn_ref_take() {
 fn nowarn_match() {
     let x = box A; // moved into a match
     match x {
-        y => drop(y)
+        y => drop(y),
     }
 }
 
 fn warn_match() {
     let x = box A;
-    match &x { // not moved
-        ref y => ()
+    match &x {
+        // not moved
+        ref y => (),
     }
 }
 
@@ -115,11 +109,11 @@ fn nowarn_large_array() {
     // should not warn, is large array
     // and should not be on stack
     let x = box [1; 10000];
-    match &x { // not moved
-        ref y => ()
+    match &x {
+        // not moved
+        ref y => (),
     }
 }
-
 
 /// ICE regression test
 pub trait Foo {
@@ -134,8 +128,7 @@ pub struct PeekableSeekable<I: Foo> {
     _peeked: I::Item,
 }
 
-pub fn new(_needs_name: Box<PeekableSeekable<&()>>) -> () {
-}
+pub fn new(_needs_name: Box<PeekableSeekable<&()>>) -> () {}
 
 /// Regression for #916, #1123
 ///
@@ -160,4 +153,24 @@ trait MyTrait {
 
 impl<T> MyTrait for Box<T> {
     fn do_sth(self) {}
+}
+
+// Issue #3739 - capture in closures
+mod issue_3739 {
+    use super::A;
+
+    fn consume<T>(_: T) {}
+    fn borrow<T>(_: &T) {}
+
+    fn closure_consume(x: Box<A>) {
+        let _ = move || {
+            consume(x);
+        };
+    }
+
+    fn closure_borrow(x: Box<A>) {
+        let _ = || {
+            borrow(&x);
+        };
+    }
 }

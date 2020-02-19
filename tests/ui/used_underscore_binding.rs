@@ -1,34 +1,32 @@
-// Copyright 2014-2018 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// aux-build:proc_macro_derive.rs
 
-
-
-
+#![feature(rustc_private)]
 #![warn(clippy::all)]
-
 #![allow(clippy::blacklisted_name)]
 #![warn(clippy::used_underscore_binding)]
+
+#[macro_use]
+extern crate proc_macro_derive;
+
+// This should not trigger the lint. There's underscore binding inside the external derive that
+// would trigger the `used_underscore_binding` lint.
+#[derive(DeriveSomething)]
+struct Baz;
 
 macro_rules! test_macro {
     () => {{
         let _foo = 42;
         _foo + 1
-    }}
+    }};
 }
 
-/// Test that we lint if we use a binding with a single leading underscore
+/// Tests that we lint if we use a binding with a single leading underscore
 fn prefix_underscore(_foo: u32) -> u32 {
     _foo + 1
 }
 
-/// Test that we lint if we use a `_`-variable defined outside within a macro expansion
-fn in_macro(_foo: u32) {
+/// Tests that we lint if we use a `_`-variable defined outside within a macro expansion
+fn in_macro_or_desugar(_foo: u32) {
     println!("{}", _foo);
     assert_eq!(_foo, _foo);
 
@@ -40,23 +38,23 @@ struct StructFieldTest {
     _underscore_field: u32,
 }
 
-/// Test that we lint the use of a struct field which is prefixed with an underscore
+/// Tests that we lint the use of a struct field which is prefixed with an underscore
 fn in_struct_field() {
     let mut s = StructFieldTest { _underscore_field: 0 };
     s._underscore_field += 1;
 }
 
-/// Test that we do not lint if the underscore is not a prefix
+/// Tests that we do not lint if the underscore is not a prefix
 fn non_prefix_underscore(some_foo: u32) -> u32 {
     some_foo + 1
 }
 
-/// Test that we do not lint if we do not use the binding (simple case)
+/// Tests that we do not lint if we do not use the binding (simple case)
 fn unused_underscore_simple(_foo: u32) -> u32 {
     1
 }
 
-/// Test that we do not lint if we do not use the binding (complex case). This checks for
+/// Tests that we do not lint if we do not use the binding (complex case). This checks for
 /// compatibility with the built-in `unused_variables` lint.
 fn unused_underscore_complex(mut _foo: u32) -> u32 {
     _foo += 1;
@@ -64,7 +62,7 @@ fn unused_underscore_complex(mut _foo: u32) -> u32 {
     1
 }
 
-///Test that we do not lint for multiple underscores
+/// Test that we do not lint for multiple underscores
 fn multiple_underscores(__foo: u32) -> u32 {
     __foo + 1
 }
@@ -74,10 +72,10 @@ fn _fn_test() {}
 struct _StructTest;
 enum _EnumTest {
     _Empty,
-    _Value(_StructTest)
+    _Value(_StructTest),
 }
 
-/// Test that we do not lint for non-variable bindings
+/// Tests that we do not lint for non-variable bindings
 fn non_variables() {
     _fn_test();
     let _s = _StructTest;
@@ -93,7 +91,7 @@ fn main() {
     let foo = 0u32;
     // tests of unused_underscore lint
     let _ = prefix_underscore(foo);
-    in_macro(foo);
+    in_macro_or_desugar(foo);
     in_struct_field();
     // possible false positives
     let _ = non_prefix_underscore(foo);
