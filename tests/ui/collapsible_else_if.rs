@@ -1,8 +1,10 @@
 // run-rustfix
-#![allow(clippy::cognitive_complexity, clippy::assertions_on_constants)]
+#![allow(clippy::assertions_on_constants, clippy::equatable_if_let)]
 
 #[rustfmt::skip]
 #[warn(clippy::collapsible_if)]
+#[warn(clippy::collapsible_else_if)]
+
 fn main() {
     let x = "hello";
     let y = "world";
@@ -75,6 +77,15 @@ fn main() {
         }
         else {
             println!("!")
+        }
+    }
+
+    if x == "hello" {
+        print!("Hello ");
+    } else {
+        #[cfg(not(roflol))]
+        if y == "world" {
+            println!("world!")
         }
     }
 }

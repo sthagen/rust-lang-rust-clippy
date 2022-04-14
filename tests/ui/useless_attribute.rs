@@ -11,7 +11,7 @@
 #[allow(unused_imports)]
 #[allow(unused_extern_crates)]
 #[macro_use]
-extern crate rustc;
+extern crate rustc_middle;
 
 #[macro_use]
 extern crate proc_macro_derive;
@@ -19,6 +19,10 @@ extern crate proc_macro_derive;
 // don't lint on unused_import for `use` items
 #[allow(unused_imports)]
 use std::collections;
+
+// don't lint on unused for `use` items
+#[allow(unused)]
+use std::option;
 
 // don't lint on deprecated for `use` items
 mod foo {
@@ -38,12 +42,20 @@ mod a {
     mod b {
         #[allow(dead_code)]
         #[allow(unreachable_pub)]
-        pub struct C {}
+        pub struct C;
     }
 
     #[allow(unreachable_pub)]
     pub use self::b::C;
 }
+
+// don't lint on clippy::wildcard_imports for `use` items
+#[allow(clippy::wildcard_imports)]
+pub use std::io::prelude::*;
+
+// don't lint on clippy::enum_glob_use for `use` items
+#[allow(clippy::enum_glob_use)]
+pub use std::cmp::Ordering::*;
 
 fn test_indented_attr() {
     #[allow(clippy::almost_swapped)]

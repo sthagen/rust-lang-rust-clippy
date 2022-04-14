@@ -1,25 +1,31 @@
-use crate::consts::{constant_context, Constant};
-use crate::utils::{match_qpath, paths, span_lint};
+use clippy_utils::consts::{constant_context, Constant};
+use clippy_utils::diagnostics::span_lint;
+use clippy_utils::is_expr_diagnostic_item;
 use if_chain::if_chain;
-use rustc::lint::in_external_macro;
+use rustc_ast::LitKind;
 use rustc_hir::{Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
+use rustc_middle::lint::in_external_macro;
 use rustc_session::{declare_lint_pass, declare_tool_lint};
-use syntax::ast::LitKind;
+use rustc_span::symbol::sym;
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for transmute calls which would receive a null pointer.
+    /// ### What it does
+    /// Checks for transmute calls which would receive a null pointer.
     ///
-    /// **Why is this bad?** Transmuting a null pointer is undefined behavior.
+    /// ### Why is this bad?
+    /// Transmuting a null pointer is undefined behavior.
     ///
-    /// **Known problems:** Not all cases can be detected at the moment of this writing.
+    /// ### Known problems
+    /// Not all cases can be detected at the moment of this writing.
     /// For example, variables which hold a null pointer and are then fed to a `transmute`
     /// call, aren't detectable yet.
     ///
-    /// **Example:**
+    /// ### Example
     /// ```rust
     /// let null_ref: &u64 = unsafe { std::mem::transmute(0 as *const u64) };
     /// ```
+    #[clippy::version = "1.35.0"]
     pub TRANSMUTING_NULL,
     correctness,
     "transmutes from a null pointer to a reference, which is undefined behavior"
@@ -27,29 +33,25 @@ declare_clippy_lint! {
 
 declare_lint_pass!(TransmutingNull => [TRANSMUTING_NULL]);
 
-const LINT_MSG: &str = "transmuting a known null pointer into a reference.";
+const LINT_MSG: &str = "transmuting a known null pointer into a reference";
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for TransmutingNull {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, expr: &'tcx Expr<'_>) {
+impl<'tcx> LateLintPass<'tcx> for TransmutingNull {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
         if in_external_macro(cx.sess(), expr.span) {
             return;
         }
 
         if_chain! {
-            if let ExprKind::Call(ref func, ref args) = expr.kind;
-            if let ExprKind::Path(ref path) = func.kind;
-            if match_qpath(path, &paths::STD_MEM_TRANSMUTE);
-            if args.len() == 1;
+            if let ExprKind::Call(func, [arg]) = expr.kind;
+            if is_expr_diagnostic_item(cx, func, sym::transmute);
 
             then {
-
                 // Catching transmute over constants that resolve to `null`.
-                let mut const_eval_context = constant_context(cx, cx.tables);
+                let mut const_eval_context = constant_context(cx, cx.typeck_results());
                 if_chain! {
-                    if let ExprKind::Path(ref _qpath) = args[0].kind;
-                    let x = const_eval_context.expr(&args[0]);
-                    if let Some(constant) = x;
-                    if let Constant::RawPtr(0) = constant;
+                    if let ExprKind::Path(ref _qpath) = arg.kind;
+                    if let Some(Constant::RawPtr(x)) = const_eval_context.expr(arg);
+                    if x == 0;
                     then {
                         span_lint(cx, TRANSMUTING_NULL, expr.span, LINT_MSG)
                     }
@@ -58,7 +60,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for TransmutingNull {
                 // Catching:
                 // `std::mem::transmute(0 as *const i32)`
                 if_chain! {
-                    if let ExprKind::Cast(ref inner_expr, ref _cast_ty) = args[0].kind;
+                    if let ExprKind::Cast(inner_expr, _cast_ty) = arg.kind;
                     if let ExprKind::Lit(ref lit) = inner_expr.kind;
                     if let LitKind::Int(0, _) = lit.node;
                     then {
@@ -69,10 +71,8 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for TransmutingNull {
                 // Catching:
                 // `std::mem::transmute(std::ptr::null::<i32>())`
                 if_chain! {
-                    if let ExprKind::Call(ref func1, ref args1) = args[0].kind;
-                    if let ExprKind::Path(ref path1) = func1.kind;
-                    if match_qpath(path1, &paths::STD_PTR_NULL);
-                    if args1.is_empty();
+                    if let ExprKind::Call(func1, []) = arg.kind;
+                    if is_expr_diagnostic_item(cx, func1, sym::ptr_null);
                     then {
                         span_lint(cx, TRANSMUTING_NULL, expr.span, LINT_MSG)
                     }

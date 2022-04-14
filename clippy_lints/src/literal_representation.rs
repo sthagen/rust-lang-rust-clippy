@@ -1,324 +1,142 @@
 //! Lints concerned with the grouping of digits with underscores in integral or
 //! floating-point literal expressions.
 
-use crate::utils::{in_macro, snippet_opt, span_lint_and_sugg};
+use clippy_utils::diagnostics::span_lint_and_sugg;
+use clippy_utils::numeric_literal::{NumericLiteral, Radix};
+use clippy_utils::source::snippet_opt;
 use if_chain::if_chain;
-use rustc::lint::in_external_macro;
+use rustc_ast::ast::{Expr, ExprKind, Lit, LitKind};
 use rustc_errors::Applicability;
 use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
-use rustc_session::{declare_lint_pass, declare_tool_lint, impl_lint_pass};
-use syntax::ast::*;
+use rustc_middle::lint::in_external_macro;
+use rustc_session::{declare_tool_lint, impl_lint_pass};
+use std::iter;
 
 declare_clippy_lint! {
-    /// **What it does:** Warns if a long integral or floating-point constant does
+    /// ### What it does
+    /// Warns if a long integral or floating-point constant does
     /// not contain underscores.
     ///
-    /// **Why is this bad?** Reading long numbers is difficult without separators.
+    /// ### Why is this bad?
+    /// Reading long numbers is difficult without separators.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// ```rust
+    /// // Bad
     /// let x: u64 = 61864918973511;
+    ///
+    /// // Good
+    /// let x: u64 = 61_864_918_973_511;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub UNREADABLE_LITERAL,
-    style,
-    "long integer literal without underscores"
+    pedantic,
+    "long literal without underscores"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Warns for mistyped suffix in literals
+    /// ### What it does
+    /// Warns for mistyped suffix in literals
     ///
-    /// **Why is this bad?** This is most probably a typo
+    /// ### Why is this bad?
+    /// This is most probably a typo
     ///
-    /// **Known problems:**
+    /// ### Known problems
     /// - Recommends a signed suffix, even though the number might be too big and an unsigned
     ///   suffix is required
     /// - Does not match on `_127` since that is a valid grouping for decimal and octal numbers
     ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// ```rust
+    /// // Probably mistyped
     /// 2_32;
+    ///
+    /// // Good
+    /// 2_i32;
     /// ```
+    #[clippy::version = "1.30.0"]
     pub MISTYPED_LITERAL_SUFFIXES,
     correctness,
     "mistyped literal suffix"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Warns if an integral or floating-point constant is
+    /// ### What it does
+    /// Warns if an integral or floating-point constant is
     /// grouped inconsistently with underscores.
     ///
-    /// **Why is this bad?** Readers may incorrectly interpret inconsistently
+    /// ### Why is this bad?
+    /// Readers may incorrectly interpret inconsistently
     /// grouped digits.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// ```rust
+    /// // Bad
     /// let x: u64 = 618_64_9189_73_511;
+    ///
+    /// // Good
+    /// let x: u64 = 61_864_918_973_511;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub INCONSISTENT_DIGIT_GROUPING,
     style,
     "integer literals with digits grouped inconsistently"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Warns if the digits of an integral or floating-point
+    /// ### What it does
+    /// Warns if hexadecimal or binary literals are not grouped
+    /// by nibble or byte.
+    ///
+    /// ### Why is this bad?
+    /// Negatively impacts readability.
+    ///
+    /// ### Example
+    /// ```rust
+    /// let x: u32 = 0xFFF_FFF;
+    /// let y: u8 = 0b01_011_101;
+    /// ```
+    #[clippy::version = "1.49.0"]
+    pub UNUSUAL_BYTE_GROUPINGS,
+    style,
+    "binary or hex literals that aren't grouped by four"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
+    /// Warns if the digits of an integral or floating-point
     /// constant are grouped into groups that
     /// are too large.
     ///
-    /// **Why is this bad?** Negatively impacts readability.
+    /// ### Why is this bad?
+    /// Negatively impacts readability.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// ```rust
     /// let x: u64 = 6186491_8973511;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub LARGE_DIGIT_GROUPS,
     pedantic,
     "grouping digits into groups that are too large"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Warns if there is a better representation for a numeric literal.
+    /// ### What it does
+    /// Warns if there is a better representation for a numeric literal.
     ///
-    /// **Why is this bad?** Especially for big powers of 2 a hexadecimal representation is more
+    /// ### Why is this bad?
+    /// Especially for big powers of 2 a hexadecimal representation is more
     /// readable than a decimal representation.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// `255` => `0xFF`
     /// `65_535` => `0xFFFF`
     /// `4_042_322_160` => `0xF0F0_F0F0`
+    #[clippy::version = "pre 1.29.0"]
     pub DECIMAL_LITERAL_REPRESENTATION,
     restriction,
     "using decimal representation when hexadecimal would be better"
-}
-
-#[derive(Debug, PartialEq)]
-pub(super) enum Radix {
-    Binary,
-    Octal,
-    Decimal,
-    Hexadecimal,
-}
-
-impl Radix {
-    /// Returns a reasonable digit group size for this radix.
-    #[must_use]
-    fn suggest_grouping(&self) -> usize {
-        match *self {
-            Self::Binary | Self::Hexadecimal => 4,
-            Self::Octal | Self::Decimal => 3,
-        }
-    }
-}
-
-/// A helper method to format numeric literals with digit grouping.
-/// `lit` must be a valid numeric literal without suffix.
-pub fn format_numeric_literal(lit: &str, type_suffix: Option<&str>, float: bool) -> String {
-    NumericLiteral::new(lit, type_suffix, float).format()
-}
-
-#[derive(Debug)]
-pub(super) struct NumericLiteral<'a> {
-    /// Which radix the literal was represented in.
-    radix: Radix,
-    /// The radix prefix, if present.
-    prefix: Option<&'a str>,
-
-    /// The integer part of the number.
-    integer: &'a str,
-    /// The fraction part of the number.
-    fraction: Option<&'a str>,
-    /// The character used as exponent seperator (b'e' or b'E') and the exponent part.
-    exponent: Option<(char, &'a str)>,
-
-    /// The type suffix, including preceding underscore if present.
-    suffix: Option<&'a str>,
-}
-
-impl<'a> NumericLiteral<'a> {
-    fn from_lit(src: &'a str, lit: &Lit) -> Option<NumericLiteral<'a>> {
-        if lit.kind.is_numeric() && src.chars().next().map_or(false, |c| c.is_digit(10)) {
-            let (unsuffixed, suffix) = split_suffix(&src, &lit.kind);
-            let float = if let LitKind::Float(..) = lit.kind { true } else { false };
-            Some(NumericLiteral::new(unsuffixed, suffix, float))
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    fn new(lit: &'a str, suffix: Option<&'a str>, float: bool) -> Self {
-        // Determine delimiter for radix prefix, if present, and radix.
-        let radix = if lit.starts_with("0x") {
-            Radix::Hexadecimal
-        } else if lit.starts_with("0b") {
-            Radix::Binary
-        } else if lit.starts_with("0o") {
-            Radix::Octal
-        } else {
-            Radix::Decimal
-        };
-
-        // Grab part of the literal after prefix, if present.
-        let (prefix, mut sans_prefix) = if let Radix::Decimal = radix {
-            (None, lit)
-        } else {
-            let (p, s) = lit.split_at(2);
-            (Some(p), s)
-        };
-
-        if suffix.is_some() && sans_prefix.ends_with('_') {
-            // The '_' before the suffix isn't part of the digits
-            sans_prefix = &sans_prefix[..sans_prefix.len() - 1];
-        }
-
-        let (integer, fraction, exponent) = Self::split_digit_parts(sans_prefix, float);
-
-        Self {
-            radix,
-            prefix,
-            integer,
-            fraction,
-            exponent,
-            suffix,
-        }
-    }
-
-    fn split_digit_parts(digits: &str, float: bool) -> (&str, Option<&str>, Option<(char, &str)>) {
-        let mut integer = digits;
-        let mut fraction = None;
-        let mut exponent = None;
-
-        if float {
-            for (i, c) in digits.char_indices() {
-                match c {
-                    '.' => {
-                        integer = &digits[..i];
-                        fraction = Some(&digits[i + 1..]);
-                    },
-                    'e' | 'E' => {
-                        if integer.len() > i {
-                            integer = &digits[..i];
-                        } else {
-                            fraction = Some(&digits[integer.len() + 1..i]);
-                        };
-                        exponent = Some((c, &digits[i + 1..]));
-                        break;
-                    },
-                    _ => {},
-                }
-            }
-        }
-
-        (integer, fraction, exponent)
-    }
-
-    /// Returns literal formatted in a sensible way.
-    fn format(&self) -> String {
-        let mut output = String::new();
-
-        if let Some(prefix) = self.prefix {
-            output.push_str(prefix);
-        }
-
-        let group_size = self.radix.suggest_grouping();
-
-        Self::group_digits(
-            &mut output,
-            self.integer,
-            group_size,
-            true,
-            self.radix == Radix::Hexadecimal,
-        );
-
-        if let Some(fraction) = self.fraction {
-            output.push('.');
-            Self::group_digits(&mut output, fraction, group_size, false, false);
-        }
-
-        if let Some((separator, exponent)) = self.exponent {
-            output.push(separator);
-            Self::group_digits(&mut output, exponent, group_size, true, false);
-        }
-
-        if let Some(suffix) = self.suffix {
-            output.push('_');
-            output.push_str(suffix);
-        }
-
-        output
-    }
-
-    fn group_digits(output: &mut String, input: &str, group_size: usize, partial_group_first: bool, pad: bool) {
-        debug_assert!(group_size > 0);
-
-        let mut digits = input.chars().filter(|&c| c != '_');
-
-        let first_group_size;
-
-        if partial_group_first {
-            first_group_size = (digits.clone().count() - 1) % group_size + 1;
-            if pad {
-                for _ in 0..group_size - first_group_size {
-                    output.push('0');
-                }
-            }
-        } else {
-            first_group_size = group_size;
-        }
-
-        for _ in 0..first_group_size {
-            if let Some(digit) = digits.next() {
-                output.push(digit);
-            }
-        }
-
-        for (c, i) in digits.zip((0..group_size).cycle()) {
-            if i == 0 {
-                output.push('_');
-            }
-            output.push(c);
-        }
-    }
-}
-
-fn split_suffix<'a>(src: &'a str, lit_kind: &LitKind) -> (&'a str, Option<&'a str>) {
-    debug_assert!(lit_kind.is_numeric());
-    if let Some(suffix_length) = lit_suffix_length(lit_kind) {
-        let (unsuffixed, suffix) = src.split_at(src.len() - suffix_length);
-        (unsuffixed, Some(suffix))
-    } else {
-        (src, None)
-    }
-}
-
-fn lit_suffix_length(lit_kind: &LitKind) -> Option<usize> {
-    debug_assert!(lit_kind.is_numeric());
-    let suffix = match lit_kind {
-        LitKind::Int(_, int_lit_kind) => match int_lit_kind {
-            LitIntType::Signed(int_ty) => Some(int_ty.name_str()),
-            LitIntType::Unsigned(uint_ty) => Some(uint_ty.name_str()),
-            LitIntType::Unsuffixed => None,
-        },
-        LitKind::Float(_, float_lit_kind) => match float_lit_kind {
-            LitFloatType::Suffixed(float_ty) => Some(float_ty.name_str()),
-            LitFloatType::Unsuffixed => None,
-        },
-        _ => None,
-    };
-
-    suffix.map(str::len)
 }
 
 enum WarningType {
@@ -327,6 +145,7 @@ enum WarningType {
     LargeDigitGroups,
     DecimalRepresentation,
     MistypedLiteralSuffix,
+    UnusualByteGroupings,
 }
 
 impl WarningType {
@@ -377,15 +196,31 @@ impl WarningType {
                 suggested_format,
                 Applicability::MachineApplicable,
             ),
+            Self::UnusualByteGroupings => span_lint_and_sugg(
+                cx,
+                UNUSUAL_BYTE_GROUPINGS,
+                span,
+                "digits of hex or binary literal not grouped by four",
+                "consider",
+                suggested_format,
+                Applicability::MachineApplicable,
+            ),
         };
     }
 }
 
-declare_lint_pass!(LiteralDigitGrouping => [
+#[allow(clippy::module_name_repetitions)]
+#[derive(Copy, Clone)]
+pub struct LiteralDigitGrouping {
+    lint_fraction_readability: bool,
+}
+
+impl_lint_pass!(LiteralDigitGrouping => [
     UNREADABLE_LITERAL,
     INCONSISTENT_DIGIT_GROUPING,
     LARGE_DIGIT_GROUPS,
     MISTYPED_LITERAL_SUFFIXES,
+    UNUSUAL_BYTE_GROUPINGS,
 ]);
 
 impl EarlyLintPass for LiteralDigitGrouping {
@@ -395,26 +230,42 @@ impl EarlyLintPass for LiteralDigitGrouping {
         }
 
         if let ExprKind::Lit(ref lit) = expr.kind {
-            Self::check_lit(cx, lit)
+            self.check_lit(cx, lit);
         }
     }
 }
 
+// Length of each UUID hyphenated group in hex digits.
+const UUID_GROUP_LENS: [usize; 5] = [8, 4, 4, 4, 12];
+
 impl LiteralDigitGrouping {
-    fn check_lit(cx: &EarlyContext<'_>, lit: &Lit) {
+    pub fn new(lint_fraction_readability: bool) -> Self {
+        Self {
+            lint_fraction_readability,
+        }
+    }
+
+    fn check_lit(self, cx: &EarlyContext<'_>, lit: &Lit) {
         if_chain! {
             if let Some(src) = snippet_opt(cx, lit.span);
-            if let Some(mut num_lit) = NumericLiteral::from_lit(&src, &lit);
+            if let Some(mut num_lit) = NumericLiteral::from_lit(&src, lit);
             then {
                 if !Self::check_for_mistyped_suffix(cx, lit.span, &mut num_lit) {
                     return;
                 }
 
+                if Self::is_literal_uuid_formatted(&mut num_lit) {
+                    return;
+                }
+
                 let result = (|| {
 
-                    let integral_group_size = Self::get_group_size(num_lit.integer.split('_'))?;
+                    let integral_group_size = Self::get_group_size(num_lit.integer.split('_'), num_lit.radix, true)?;
                     if let Some(fraction) = num_lit.fraction {
-                        let fractional_group_size = Self::get_group_size(fraction.rsplit('_'))?;
+                        let fractional_group_size = Self::get_group_size(
+                            fraction.rsplit('_'),
+                            num_lit.radix,
+                            self.lint_fraction_readability)?;
 
                         let consistent = Self::parts_consistent(integral_group_size,
                                                                 fractional_group_size,
@@ -424,6 +275,7 @@ impl LiteralDigitGrouping {
                             return Err(WarningType::InconsistentDigitGrouping);
                         };
                     }
+
                     Ok(())
                 })();
 
@@ -432,15 +284,16 @@ impl LiteralDigitGrouping {
                     let should_warn = match warning_type {
                         | WarningType::UnreadableLiteral
                         | WarningType::InconsistentDigitGrouping
+                        | WarningType::UnusualByteGroupings
                         | WarningType::LargeDigitGroups => {
-                            !in_macro(lit.span)
+                            !lit.span.from_expansion()
                         }
                         WarningType::DecimalRepresentation | WarningType::MistypedLiteralSuffix => {
                             true
                         }
                     };
                     if should_warn {
-                        warning_type.display(num_lit.format(), cx, lit.span)
+                        warning_type.display(num_lit.format(), cx, lit.span);
                     }
                 }
             }
@@ -459,8 +312,8 @@ impl LiteralDigitGrouping {
 
         let (part, mistyped_suffixes, missing_char) = if let Some((_, exponent)) = &mut num_lit.exponent {
             (exponent, &["32", "64"][..], 'f')
-        } else if let Some(fraction) = &mut num_lit.fraction {
-            (fraction, &["32", "64"][..], 'f')
+        } else if num_lit.fraction.is_some() {
+            (&mut num_lit.integer, &["32", "64"][..], 'f')
         } else {
             (&mut num_lit.integer, &["8", "16", "32", "64"][..], 'i')
         };
@@ -477,6 +330,28 @@ impl LiteralDigitGrouping {
             false
         } else {
             true
+        }
+    }
+
+    /// Checks whether the numeric literal matches the formatting of a UUID.
+    ///
+    /// Returns `true` if the radix is hexadecimal, and the groups match the
+    /// UUID format of 8-4-4-4-12.
+    fn is_literal_uuid_formatted(num_lit: &mut NumericLiteral<'_>) -> bool {
+        if num_lit.radix != Radix::Hexadecimal {
+            return false;
+        }
+
+        // UUIDs should not have a fraction
+        if num_lit.fraction.is_some() {
+            return false;
+        }
+
+        let group_sizes: Vec<usize> = num_lit.integer.split('_').map(str::len).collect();
+        if UUID_GROUP_LENS.len() == group_sizes.len() {
+            iter::zip(&UUID_GROUP_LENS, &group_sizes).all(|(&a, &b)| a == b)
+        } else {
+            false
         }
     }
 
@@ -504,10 +379,18 @@ impl LiteralDigitGrouping {
 
     /// Returns the size of the digit groups (or None if ungrouped) if successful,
     /// otherwise returns a `WarningType` for linting.
-    fn get_group_size<'a>(groups: impl Iterator<Item = &'a str>) -> Result<Option<usize>, WarningType> {
+    fn get_group_size<'a>(
+        groups: impl Iterator<Item = &'a str>,
+        radix: Radix,
+        lint_unreadable: bool,
+    ) -> Result<Option<usize>, WarningType> {
         let mut groups = groups.map(str::len);
 
         let first = groups.next().expect("At least one group");
+
+        if (radix == Radix::Binary || radix == Radix::Hexadecimal) && groups.any(|i| i != 4 && i != 2) {
+            return Err(WarningType::UnusualByteGroupings);
+        }
 
         if let Some(second) = groups.next() {
             if !groups.all(|x| x == second) || first > second {
@@ -517,7 +400,7 @@ impl LiteralDigitGrouping {
             } else {
                 Ok(Some(second))
             }
-        } else if first > 5 {
+        } else if first > 5 && lint_unreadable {
             Err(WarningType::UnreadableLiteral)
         } else {
             Ok(None)
@@ -540,7 +423,7 @@ impl EarlyLintPass for DecimalLiteralRepresentation {
         }
 
         if let ExprKind::Lit(ref lit) = expr.kind {
-            self.check_lit(cx, lit)
+            self.check_lit(cx, lit);
         }
     }
 }
@@ -555,14 +438,14 @@ impl DecimalLiteralRepresentation {
         if_chain! {
             if let LitKind::Int(val, _) = lit.kind;
             if let Some(src) = snippet_opt(cx, lit.span);
-            if let Some(num_lit) = NumericLiteral::from_lit(&src, &lit);
+            if let Some(num_lit) = NumericLiteral::from_lit(&src, lit);
             if num_lit.radix == Radix::Decimal;
             if val >= u128::from(self.threshold);
             then {
                 let hex = format!("{:#X}", val);
                 let num_lit = NumericLiteral::new(&hex, num_lit.suffix, false);
                 let _ = Self::do_lint(num_lit.integer).map_err(|warning_type| {
-                    warning_type.display(num_lit.format(), cx, lit.span)
+                    warning_type.display(num_lit.format(), cx, lit.span);
                 });
             }
         }

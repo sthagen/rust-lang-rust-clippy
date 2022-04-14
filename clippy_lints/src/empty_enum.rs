@@ -1,25 +1,28 @@
 //! lint when there is an enum with no variants
 
-use crate::utils::span_lint_and_then;
-use rustc_hir::*;
+use clippy_utils::diagnostics::span_lint_and_help;
+use rustc_hir::{Item, ItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_session::{declare_lint_pass, declare_tool_lint};
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for `enum`s with no variants.
+    /// ### What it does
+    /// Checks for `enum`s with no variants.
     ///
-    /// **Why is this bad?** If you want to introduce a type which
-    /// can't be instantiated, you should use `!` (the never type),
+    /// As of this writing, the `never_type` is still a
+    /// nightly-only experimental API. Therefore, this lint is only triggered
+    /// if the `never_type` is enabled.
+    ///
+    /// ### Why is this bad?
+    /// If you want to introduce a type which
+    /// can't be instantiated, you should use `!` (the primitive type "never"),
     /// or a wrapper around it, because `!` has more extensive
     /// compiler support (type inference, etc...) and wrappers
     /// around it are the conventional way to define an uninhabited type.
     /// For further information visit [never type documentation](https://doc.rust-lang.org/std/primitive.never.html)
     ///
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
+    /// ### Example
     /// Bad:
     /// ```rust
     /// enum Test {}
@@ -31,6 +34,7 @@ declare_clippy_lint! {
     ///
     /// struct Test(!);
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub EMPTY_ENUM,
     pedantic,
     "enum with no variants"
@@ -38,20 +42,26 @@ declare_clippy_lint! {
 
 declare_lint_pass!(EmptyEnum => [EMPTY_ENUM]);
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for EmptyEnum {
-    fn check_item(&mut self, cx: &LateContext<'_, '_>, item: &Item<'_>) {
-        let did = cx.tcx.hir().local_def_id(item.hir_id);
+impl<'tcx> LateLintPass<'tcx> for EmptyEnum {
+    fn check_item(&mut self, cx: &LateContext<'_>, item: &Item<'_>) {
+        // Only suggest the `never_type` if the feature is enabled
+        if !cx.tcx.features().never_type {
+            return;
+        }
+
         if let ItemKind::Enum(..) = item.kind {
-            let ty = cx.tcx.type_of(did);
+            let ty = cx.tcx.type_of(item.def_id);
             let adt = ty.ty_adt_def().expect("already checked whether this is an enum");
-            if adt.variants.is_empty() {
-                span_lint_and_then(cx, EMPTY_ENUM, item.span, "enum with no variants", |db| {
-                    db.span_help(
-                        item.span,
-                        "consider using the uninhabited type `!` (never type) or a wrapper \
-                         around it to introduce a type which can't be instantiated",
-                    );
-                });
+            if adt.variants().is_empty() {
+                span_lint_and_help(
+                    cx,
+                    EMPTY_ENUM,
+                    item.span,
+                    "enum with no variants",
+                    None,
+                    "consider using the uninhabited type `!` (never type) or a wrapper \
+                    around it to introduce a type which can't be instantiated",
+                );
             }
         }
     }

@@ -1,5 +1,5 @@
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:16:5
+  --> $DIR/identity_op.rs:39:5
    |
 LL |     x + 0;
    |     ^^^^^
@@ -7,46 +7,106 @@ LL |     x + 0;
    = note: `-D clippy::identity-op` implied by `-D warnings`
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:17:5
+  --> $DIR/identity_op.rs:40:5
    |
 LL |     x + (1 - 1);
    |     ^^^^^^^^^^^
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:19:5
+  --> $DIR/identity_op.rs:42:5
    |
 LL |     0 + x;
    |     ^^^^^
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:22:5
+  --> $DIR/identity_op.rs:45:5
    |
 LL |     x | (0);
    |     ^^^^^^^
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:25:5
+  --> $DIR/identity_op.rs:48:5
    |
 LL |     x * 1;
    |     ^^^^^
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:26:5
+  --> $DIR/identity_op.rs:49:5
    |
 LL |     1 * x;
    |     ^^^^^
 
 error: the operation is ineffective. Consider reducing it to `x`
-  --> $DIR/identity_op.rs:32:5
+  --> $DIR/identity_op.rs:55:5
    |
 LL |     -1 & x;
    |     ^^^^^^
 
 error: the operation is ineffective. Consider reducing it to `u`
-  --> $DIR/identity_op.rs:35:5
+  --> $DIR/identity_op.rs:58:5
    |
 LL |     u & 255;
    |     ^^^^^^^
 
-error: aborting due to 8 previous errors
+error: the operation is ineffective. Consider reducing it to `42`
+  --> $DIR/identity_op.rs:61:5
+   |
+LL |     42 << 0;
+   |     ^^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `1`
+  --> $DIR/identity_op.rs:62:5
+   |
+LL |     1 >> 0;
+   |     ^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `42`
+  --> $DIR/identity_op.rs:63:5
+   |
+LL |     42 >> 0;
+   |     ^^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `&x`
+  --> $DIR/identity_op.rs:64:5
+   |
+LL |     &x >> 0;
+   |     ^^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `x`
+  --> $DIR/identity_op.rs:65:5
+   |
+LL |     x >> &0;
+   |     ^^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `2`
+  --> $DIR/identity_op.rs:72:5
+   |
+LL |     2 % 3;
+   |     ^^^^^
+
+error: the operation is ineffective. Consider reducing it to `-2`
+  --> $DIR/identity_op.rs:73:5
+   |
+LL |     -2 % 3;
+   |     ^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `2`
+  --> $DIR/identity_op.rs:74:5
+   |
+LL |     2 % -3 + x;
+   |     ^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `-2`
+  --> $DIR/identity_op.rs:75:5
+   |
+LL |     -2 % -3 + x;
+   |     ^^^^^^^
+
+error: the operation is ineffective. Consider reducing it to `1`
+  --> $DIR/identity_op.rs:76:9
+   |
+LL |     x + 1 % 3;
+   |         ^^^^^
+
+error: aborting due to 18 previous errors
 

@@ -8,7 +8,7 @@ on:
   pull_request:
     # Only run on paths, that get checked by the clippy_dev tool
     paths:
-    - 'CAHNGELOG.md'
+    - 'CHANGELOG.md'
     - 'README.md'
     - '**.stderr'
     - '**.rs'
@@ -22,30 +22,26 @@ jobs:
 
     steps:
     # Setup
-    - name: rust-toolchain
-      uses: actions-rs/toolchain@v1.0.3
-      with:
-        toolchain: nightly
-        target: x86_64-unknown-linux-gnu
-        profile: minimal
-        components: rustfmt
-
     - name: Checkout
-      uses: actions/checkout@v2.0.0
+      uses: actions/checkout@v2.3.3
 
     # Run
     - name: Build
       run: cargo build --features deny-warnings
       working-directory: clippy_dev
 
-    - name: Test limit-stderr-length
-      run: cargo dev --limit-stderr-length
-
     - name: Test update_lints
       run: cargo dev update_lints --check
 
     - name: Test fmt
       run: cargo dev fmt --check
+
+    - name: Test cargo dev new lint
+      run: |
+        cargo dev new_lint --name new_early_pass --pass early
+        cargo dev new_lint --name new_late_pass --pass late
+        cargo check
+        git reset --hard HEAD
 
   # These jobs doesn't actually test anything, but they're only used to tell
   # bors the build completed, as there is no practical way to detect when a

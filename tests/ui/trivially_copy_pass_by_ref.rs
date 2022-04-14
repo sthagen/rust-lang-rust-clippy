@@ -1,11 +1,8 @@
 // normalize-stderr-test "\(\d+ byte\)" -> "(N byte)"
 // normalize-stderr-test "\(limit: \d+ byte\)" -> "(limit: N byte)"
 
-#![allow(
-    clippy::many_single_char_names,
-    clippy::blacklisted_name,
-    clippy::redundant_field_names
-)]
+#![deny(clippy::trivially_copy_pass_by_ref)]
+#![allow(clippy::blacklisted_name, clippy::redundant_field_names)]
 
 #[derive(Copy, Clone)]
 struct Foo(u32);
@@ -57,6 +54,8 @@ impl Foo {
     fn bad(&self, x: &u32, y: &Foo, z: &Baz) {}
 
     fn bad2(x: &u32, y: &Foo, z: &Baz) {}
+
+    fn bad_issue7518(self, other: &Self) {}
 }
 
 impl AsRef<u32> for Foo {
@@ -94,6 +93,24 @@ mod issue3992 {
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn c(d: &u16) {}
+}
+
+mod issue5876 {
+    // Don't lint here as it is always inlined
+    #[inline(always)]
+    fn foo_always(x: &i32) {
+        println!("{}", x);
+    }
+
+    #[inline(never)]
+    fn foo_never(x: &i32) {
+        println!("{}", x);
+    }
+
+    #[inline]
+    fn foo(x: &i32) {
+        println!("{}", x);
+    }
 }
 
 fn main() {

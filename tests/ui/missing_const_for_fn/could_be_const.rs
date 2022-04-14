@@ -1,5 +1,6 @@
 #![warn(clippy::missing_const_for_fn)]
-#![allow(clippy::let_and_return)]
+#![allow(incomplete_features, clippy::let_and_return)]
+#![feature(custom_inner_attributes)]
 
 use std::mem::transmute;
 
@@ -11,6 +12,10 @@ impl Game {
     // Could be const
     pub fn new() -> Self {
         Self { guess: 42 }
+    }
+
+    fn const_generic_params<'a, T, const N: usize>(&self, b: &'a [T; N]) -> &'a [T; N] {
+        b
     }
 }
 
@@ -44,8 +49,6 @@ fn sub(x: u32) -> usize {
     unsafe { transmute(&x) }
 }
 
-// NOTE: This is currently not yet allowed to be const
-// Once implemented, Clippy should be able to suggest this as const, too.
 fn generic_arr<T: Copy>(t: [T; 1]) -> T {
     t[0]
 }
@@ -62,6 +65,15 @@ mod with_drop {
         pub fn b(self, a: &A) -> B {
             B
         }
+    }
+}
+
+mod const_fn_stabilized_before_msrv {
+    #![clippy::msrv = "1.47.0"]
+
+    // This could be const because `u8::is_ascii_digit` is a stable const function in 1.47.
+    fn const_fn_stabilized_before_msrv(byte: u8) {
+        byte.is_ascii_digit();
     }
 }
 

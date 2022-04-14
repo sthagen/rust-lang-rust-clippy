@@ -137,4 +137,98 @@ fn h<T: Ord>(x: T, y: T, z: T) {
     }
 }
 
+// The following uses should be ignored
+mod issue_5212 {
+    use super::{a, b, c};
+    fn foo() -> u8 {
+        21
+    }
+
+    fn same_operation_equals() {
+        // operands are fixed
+
+        if foo() == 42 {
+            a()
+        } else if foo() == 42 {
+            b()
+        }
+
+        if foo() == 42 {
+            a()
+        } else if foo() == 42 {
+            b()
+        } else {
+            c()
+        }
+
+        // operands are transposed
+
+        if foo() == 42 {
+            a()
+        } else if 42 == foo() {
+            b()
+        }
+    }
+
+    fn same_operation_not_equals() {
+        // operands are fixed
+
+        if foo() > 42 {
+            a()
+        } else if foo() > 42 {
+            b()
+        }
+
+        if foo() > 42 {
+            a()
+        } else if foo() > 42 {
+            b()
+        } else {
+            c()
+        }
+
+        if foo() < 42 {
+            a()
+        } else if foo() < 42 {
+            b()
+        }
+
+        if foo() < 42 {
+            a()
+        } else if foo() < 42 {
+            b()
+        } else {
+            c()
+        }
+    }
+}
+
+enum Sign {
+    Negative,
+    Positive,
+    Zero,
+}
+
+impl Sign {
+    const fn sign_i8(n: i8) -> Self {
+        if n == 0 {
+            Sign::Zero
+        } else if n > 0 {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        }
+    }
+}
+
+const fn sign_i8(n: i8) -> Sign {
+    if n == 0 {
+        Sign::Zero
+    } else if n > 0 {
+        Sign::Positive
+    } else {
+        Sign::Negative
+    }
+}
+
 fn main() {}

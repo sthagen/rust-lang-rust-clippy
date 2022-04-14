@@ -1,4 +1,5 @@
 #![warn(clippy::let_underscore_must_use)]
+#![allow(clippy::unnecessary_wraps)]
 
 // Debug implementations can fire this lint,
 // so we shouldn't lint external macros
@@ -25,7 +26,7 @@ fn h() -> u32 {
     0
 }
 
-struct S {}
+struct S;
 
 impl S {
     #[must_use]
@@ -87,5 +88,8 @@ fn main() {
 
     let _ = a.map(|_| ());
 
+    let _ = a;
+
+    #[allow(clippy::let_underscore_must_use)]
     let _ = a;
 }

@@ -1,16 +1,10 @@
 error: use of `Debug`-based formatting
-  --> $DIR/print.rs:11:19
+  --> $DIR/print.rs:11:20
    |
 LL |         write!(f, "{:?}", 43.1415)
-   |                   ^^^^^^
+   |                    ^^^^
    |
    = note: `-D clippy::use-debug` implied by `-D warnings`
-
-error: use of `Debug`-based formatting
-  --> $DIR/print.rs:18:19
-   |
-LL |         write!(f, "{:?}", 42.718)
-   |                   ^^^^^^
 
 error: use of `println!`
   --> $DIR/print.rs:23:5
@@ -39,10 +33,10 @@ LL |     print!("Hello {:?}", "World");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: use of `Debug`-based formatting
-  --> $DIR/print.rs:28:12
+  --> $DIR/print.rs:28:19
    |
 LL |     print!("Hello {:?}", "World");
-   |            ^^^^^^^^^^^^
+   |                   ^^^^
 
 error: use of `print!`
   --> $DIR/print.rs:30:5
@@ -51,10 +45,10 @@ LL |     print!("Hello {:#?}", "#orld");
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: use of `Debug`-based formatting
-  --> $DIR/print.rs:30:12
+  --> $DIR/print.rs:30:19
    |
 LL |     print!("Hello {:#?}", "#orld");
-   |            ^^^^^^^^^^^^^
+   |                   ^^^^^
 
-error: aborting due to 9 previous errors
+error: aborting due to 8 previous errors
 

@@ -1,3 +1,5 @@
+#![deny(clippy::match_bool)]
+
 fn match_bool() {
     let test: bool = true;
 
@@ -47,6 +49,14 @@ fn match_bool() {
         1..=10 => 1,
         11..=20 => 2,
         _ => 3,
+    };
+
+    // Don't lint
+    let _ = match test {
+        #[cfg(feature = "foo")]
+        true if option == 5 => 10,
+        true => 0,
+        false => 1,
     };
 }
 

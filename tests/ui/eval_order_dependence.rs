@@ -2,7 +2,6 @@
 #[allow(
     unused_assignments,
     unused_variables,
-    clippy::many_single_char_names,
     clippy::no_effect,
     dead_code,
     clippy::blacklisted_name
@@ -106,4 +105,8 @@ fn main() {
             x
         },
     );
+}
+
+async fn issue_6925() {
+    let _ = vec![async { true }.await, async { false }.await];
 }

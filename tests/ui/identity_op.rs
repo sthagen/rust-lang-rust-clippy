@@ -1,11 +1,34 @@
+use std::fmt::Write as _;
+
 const ONE: i64 = 1;
 const NEG_ONE: i64 = -1;
 const ZERO: i64 = 0;
+
+struct A(String);
+
+impl std::ops::Shl<i32> for A {
+    type Output = A;
+    fn shl(mut self, other: i32) -> Self {
+        let _ = write!(self.0, "{}", other);
+        self
+    }
+}
+
+struct Length(u8);
+struct Meter;
+
+impl core::ops::Mul<Meter> for u8 {
+    type Output = Length;
+    fn mul(self, _: Meter) -> Length {
+        Length(self)
+    }
+}
 
 #[allow(
     clippy::eq_op,
     clippy::no_effect,
     clippy::unnecessary_operation,
+    clippy::op_ref,
     clippy::double_parens
 )]
 #[warn(clippy::identity_op)]
@@ -33,4 +56,25 @@ fn main() {
 
     let u: u8 = 0;
     u & 255;
+
+    1 << 0; // no error, this case is allowed, see issue 3430
+    42 << 0;
+    1 >> 0;
+    42 >> 0;
+    &x >> 0;
+    x >> &0;
+
+    let mut a = A("".into());
+    let b = a << 0; // no error: non-integer
+
+    1 * Meter; // no error: non-integer
+
+    2 % 3;
+    -2 % 3;
+    2 % -3 + x;
+    -2 % -3 + x;
+    x + 1 % 3;
+    (x + 1) % 3; // no error
+    4 % 3; // no error
+    4 % -3; // no error
 }

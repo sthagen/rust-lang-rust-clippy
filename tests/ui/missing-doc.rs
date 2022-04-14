@@ -2,10 +2,10 @@
 // When denying at the crate level, be sure to not get random warnings from the
 // injected intrinsics by the compiler.
 #![allow(dead_code)]
-#![feature(global_asm)]
-
 //! Some garbage docs for the crate here
 #![doc = "More garbage"]
+
+use std::arch::global_asm;
 
 type Typedef = String;
 pub type PubTypedef = String;
@@ -90,10 +90,10 @@ mod internal_impl {
 }
 /// dox
 pub mod public_interface {
-    pub use internal_impl::documented as foo;
-    pub use internal_impl::globbed::*;
-    pub use internal_impl::undocumented1 as bar;
-    pub use internal_impl::{documented, undocumented2};
+    pub use crate::internal_impl::documented as foo;
+    pub use crate::internal_impl::globbed::*;
+    pub use crate::internal_impl::undocumented1 as bar;
+    pub use crate::internal_impl::{documented, undocumented2};
 }
 
 fn main() {}

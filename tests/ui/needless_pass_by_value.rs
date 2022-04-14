@@ -3,7 +3,6 @@
     dead_code,
     clippy::single_match,
     clippy::redundant_pattern_matching,
-    clippy::many_single_char_names,
     clippy::option_option,
     clippy::redundant_clone
 )]
@@ -116,7 +115,7 @@ extern "C" fn ext(x: MaybeUninit<usize>) -> usize {
     unsafe { x.assume_init() }
 }
 
-// whitelist RangeArgument
+// exempt RangeArgument
 fn range<T: ::std::ops::RangeBounds<usize>>(range: T) {
     let _ = range.start_bound();
 }

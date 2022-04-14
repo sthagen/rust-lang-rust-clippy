@@ -1,9 +1,11 @@
 Thank you for making Clippy better!
 
 We're collecting our changelog from pull request descriptions.
-If your PR only updates to the latest nightly, you can leave the
-`changelog` entry as `none`. Otherwise, please write a short comment
-explaining your change.
+If your PR only includes internal changes, you can just write
+`changelog: none`. Otherwise, please write a short comment
+explaining your change. Also, it's helpful for us that
+the lint name is put into brackets `[]` and backticks `` ` ` ``,
+e.g. ``[`lint_name`]``.
 
 If your PR fixes an issue, you can add "fixes #issue_number" into this
 PR description. This way the issue will be automatically closed when
@@ -12,12 +14,12 @@ your PR is merged.
 If you added a new lint, here's a checklist for things that will be
 checked during review or continuous integration.
 
-- [ ] Followed [lint naming conventions][lint_naming]
-- [ ] Added passing UI tests (including committed `.stderr` file)
-- [ ] `cargo test` passes locally
-- [ ] Executed `cargo dev update_lints`
-- [ ] Added lint documentation
-- [ ] Run `cargo dev fmt`
+- \[ ] Followed [lint naming conventions][lint_naming]
+- \[ ] Added passing UI tests (including committed `.stderr` file)
+- \[ ] `cargo test` passes locally
+- \[ ] Executed `cargo dev update_lints`
+- \[ ] Added lint documentation
+- \[ ] Run `cargo dev fmt`
 
 [lint_naming]: https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints
 
@@ -28,4 +30,6 @@ Delete this line and everything above before opening your PR.
 
 ---
 
-changelog: none
+*Please write a short comment explaining your change (or "none" for internal only changes)*
+
+changelog:

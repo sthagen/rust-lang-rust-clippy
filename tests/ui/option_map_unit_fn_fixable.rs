@@ -2,6 +2,7 @@
 
 #![warn(clippy::option_map_unit_fn)]
 #![allow(unused)]
+#![allow(clippy::unnecessary_wraps)]
 
 fn do_nothing<T>(_: T) {}
 
@@ -13,14 +14,18 @@ fn plus_one(value: usize) -> usize {
     value + 1
 }
 
+fn option() -> Option<usize> {
+    Some(10)
+}
+
 struct HasOption {
     field: Option<usize>,
 }
 
 impl HasOption {
-    fn do_option_nothing(self: &Self, value: usize) {}
+    fn do_option_nothing(&self, value: usize) {}
 
-    fn do_option_plus_one(self: &Self, value: usize) -> usize {
+    fn do_option_plus_one(&self, value: usize) -> usize {
         value + 1
     }
 }
@@ -73,6 +78,11 @@ fn option_map_unit_fn() {
     x.field.map(|value| { { plus_one(value + captured); } });
 
 
-    x.field.map(|ref value| { do_nothing(value + captured) });}
+    x.field.map(|ref value| { do_nothing(value + captured) });
+
+    option().map(do_nothing);
+
+    option().map(|value| println!("{:?}", value));
+}
 
 fn main() {}

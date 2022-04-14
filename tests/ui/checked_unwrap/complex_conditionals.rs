@@ -1,5 +1,5 @@
 #![deny(clippy::panicking_unwrap, clippy::unnecessary_unwrap)]
-#![allow(clippy::if_same_then_else)]
+#![allow(clippy::if_same_then_else, clippy::branches_sharing_code)]
 
 fn test_complex_conditions() {
     let x: Result<(), ()> = Ok(());
@@ -48,17 +48,6 @@ fn test_complex_conditions() {
         y.unwrap_err(); // will panic
         z.unwrap(); // will panic
         z.unwrap_err(); // unnecessary
-    }
-}
-
-fn test_nested() {
-    fn nested() {
-        let x = Some(());
-        if x.is_some() {
-            x.unwrap(); // unnecessary
-        } else {
-            x.unwrap(); // will panic
-        }
     }
 }
 

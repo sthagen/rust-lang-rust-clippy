@@ -1,21 +1,20 @@
 //! lint on blocks unnecessarily using >= with a + 1 or - 1
 
+use clippy_utils::diagnostics::span_lint_and_sugg;
+use clippy_utils::source::snippet_opt;
+use rustc_ast::ast::{BinOpKind, Expr, ExprKind, Lit, LitKind};
 use rustc_errors::Applicability;
 use rustc_lint::{EarlyContext, EarlyLintPass};
 use rustc_session::{declare_lint_pass, declare_tool_lint};
-use syntax::ast::*;
-
-use crate::utils::{snippet_opt, span_lint_and_then};
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for usage of `x >= y + 1` or `x - 1 >= y` (and `<=`) in a block
+    /// ### What it does
+    /// Checks for usage of `x >= y + 1` or `x - 1 >= y` (and `<=`) in a block
     ///
+    /// ### Why is this bad?
+    /// Readability -- better to use `> y` instead of `>= y + 1`.
     ///
-    /// **Why is this bad?** Readability -- better to use `> y` instead of `>= y + 1`.
-    ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```rust
     /// # let x = 1;
     /// # let y = 1;
@@ -29,6 +28,7 @@ declare_clippy_lint! {
     /// # let y = 1;
     /// if x > y {}
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub INT_PLUS_ONE,
     complexity,
     "instead of using `x >= y + 1`, use `x > y`"
@@ -47,8 +47,8 @@ declare_lint_pass!(IntPlusOne => [INT_PLUS_ONE]);
 
 #[derive(Copy, Clone)]
 enum Side {
-    LHS,
-    RHS,
+    Lhs,
+    Rhs,
 }
 
 impl IntPlusOne {
@@ -67,11 +67,11 @@ impl IntPlusOne {
                 match (lhskind.node, &lhslhs.kind, &lhsrhs.kind) {
                     // `-1 + x`
                     (BinOpKind::Add, &ExprKind::Lit(ref lit), _) if Self::check_lit(lit, -1) => {
-                        Self::generate_recommendation(cx, binop, lhsrhs, rhs, Side::LHS)
+                        Self::generate_recommendation(cx, binop, lhsrhs, rhs, Side::Lhs)
                     },
                     // `x - 1`
                     (BinOpKind::Sub, _, &ExprKind::Lit(ref lit)) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, lhslhs, rhs, Side::LHS)
+                        Self::generate_recommendation(cx, binop, lhslhs, rhs, Side::Lhs)
                     },
                     _ => None,
                 }
@@ -83,14 +83,14 @@ impl IntPlusOne {
                 match (&rhslhs.kind, &rhsrhs.kind) {
                     // `y + 1` and `1 + y`
                     (&ExprKind::Lit(ref lit), _) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, rhsrhs, lhs, Side::RHS)
+                        Self::generate_recommendation(cx, binop, rhsrhs, lhs, Side::Rhs)
                     },
                     (_, &ExprKind::Lit(ref lit)) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, rhslhs, lhs, Side::RHS)
+                        Self::generate_recommendation(cx, binop, rhslhs, lhs, Side::Rhs)
                     },
                     _ => None,
                 }
-            }
+            },
             // case where `x + 1 <= ...` or `1 + x <= ...`
             (BinOpKind::Le, &ExprKind::Binary(ref lhskind, ref lhslhs, ref lhsrhs), _)
                 if lhskind.node == BinOpKind::Add =>
@@ -98,24 +98,24 @@ impl IntPlusOne {
                 match (&lhslhs.kind, &lhsrhs.kind) {
                     // `1 + x` and `x + 1`
                     (&ExprKind::Lit(ref lit), _) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, lhsrhs, rhs, Side::LHS)
+                        Self::generate_recommendation(cx, binop, lhsrhs, rhs, Side::Lhs)
                     },
                     (_, &ExprKind::Lit(ref lit)) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, lhslhs, rhs, Side::LHS)
+                        Self::generate_recommendation(cx, binop, lhslhs, rhs, Side::Lhs)
                     },
                     _ => None,
                 }
-            }
+            },
             // case where `... >= y - 1` or `... >= -1 + y`
             (BinOpKind::Le, _, &ExprKind::Binary(ref rhskind, ref rhslhs, ref rhsrhs)) => {
                 match (rhskind.node, &rhslhs.kind, &rhsrhs.kind) {
                     // `-1 + y`
                     (BinOpKind::Add, &ExprKind::Lit(ref lit), _) if Self::check_lit(lit, -1) => {
-                        Self::generate_recommendation(cx, binop, rhsrhs, lhs, Side::RHS)
+                        Self::generate_recommendation(cx, binop, rhsrhs, lhs, Side::Rhs)
                     },
                     // `y - 1`
                     (BinOpKind::Sub, _, &ExprKind::Lit(ref lit)) if Self::check_lit(lit, 1) => {
-                        Self::generate_recommendation(cx, binop, rhslhs, lhs, Side::RHS)
+                        Self::generate_recommendation(cx, binop, rhslhs, lhs, Side::Rhs)
                     },
                     _ => None,
                 }
@@ -139,8 +139,8 @@ impl IntPlusOne {
         if let Some(snippet) = snippet_opt(cx, node.span) {
             if let Some(other_side_snippet) = snippet_opt(cx, other_side.span) {
                 let rec = match side {
-                    Side::LHS => Some(format!("{} {} {}", snippet, binop_string, other_side_snippet)),
-                    Side::RHS => Some(format!("{} {} {}", other_side_snippet, binop_string, snippet)),
+                    Side::Lhs => Some(format!("{} {} {}", snippet, binop_string, other_side_snippet)),
+                    Side::Rhs => Some(format!("{} {} {}", other_side_snippet, binop_string, snippet)),
                 };
                 return rec;
             }
@@ -149,19 +149,14 @@ impl IntPlusOne {
     }
 
     fn emit_warning(cx: &EarlyContext<'_>, block: &Expr, recommendation: String) {
-        span_lint_and_then(
+        span_lint_and_sugg(
             cx,
             INT_PLUS_ONE,
             block.span,
-            "Unnecessary `>= y + 1` or `x - 1 >=`",
-            |db| {
-                db.span_suggestion(
-                    block.span,
-                    "change it to",
-                    recommendation,
-                    Applicability::MachineApplicable, // snippet
-                );
-            },
+            "unnecessary `>= y + 1` or `x - 1 >=`",
+            "change it to",
+            recommendation,
+            Applicability::MachineApplicable, // snippet
         );
     }
 }
@@ -169,8 +164,8 @@ impl IntPlusOne {
 impl EarlyLintPass for IntPlusOne {
     fn check_expr(&mut self, cx: &EarlyContext<'_>, item: &Expr) {
         if let ExprKind::Binary(ref kind, ref lhs, ref rhs) = item.kind {
-            if let Some(ref rec) = Self::check_binop(cx, kind.node, lhs, rhs) {
-                Self::emit_warning(cx, item, rec.clone());
+            if let Some(rec) = Self::check_binop(cx, kind.node, lhs, rhs) {
+                Self::emit_warning(cx, item, rec);
             }
         }
     }

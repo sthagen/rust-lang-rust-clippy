@@ -1,86 +1,124 @@
-use clippy_dev::clippy_project_root;
-use std::fs::{File, OpenOptions};
-use std::io;
+use crate::clippy_project_root;
+use indoc::indoc;
+use std::fmt::Write as _;
+use std::fs::{self, OpenOptions};
 use std::io::prelude::*;
-use std::io::ErrorKind;
-use std::path::Path;
+use std::io::{self, ErrorKind};
+use std::path::{Path, PathBuf};
 
-pub fn create(pass: Option<&str>, lint_name: Option<&str>, category: Option<&str>) -> Result<(), io::Error> {
-    let pass = pass.expect("`pass` argument is validated by clap");
-    let lint_name = lint_name.expect("`name` argument is validated by clap");
-    let category = category.expect("`category` argument is validated by clap");
+struct LintData<'a> {
+    pass: &'a str,
+    name: &'a str,
+    category: &'a str,
+    project_root: PathBuf,
+}
 
-    match open_files(lint_name) {
-        Ok((mut test_file, mut lint_file)) => {
-            let (pass_type, pass_lifetimes, pass_import, context_import) = match pass {
-                "early" => ("EarlyLintPass", "", "use syntax::ast::*;", "EarlyContext"),
-                "late" => ("LateLintPass", "<'_, '_>", "use rustc_hir::*;", "LateContext"),
-                _ => {
-                    unreachable!("`pass_type` should only ever be `early` or `late`!");
-                },
-            };
+trait Context {
+    fn context<C: AsRef<str>>(self, text: C) -> Self;
+}
 
-            let camel_case_name = to_camel_case(lint_name);
-
-            if let Err(e) = test_file.write_all(get_test_file_contents(lint_name).as_bytes()) {
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("Could not write to test file: {}", e),
-                ));
-            };
-
-            if let Err(e) = lint_file.write_all(
-                get_lint_file_contents(
-                    pass_type,
-                    pass_lifetimes,
-                    lint_name,
-                    &camel_case_name,
-                    category,
-                    pass_import,
-                    context_import,
-                )
-                .as_bytes(),
-            ) {
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("Could not write to lint file: {}", e),
-                ));
-            }
-            Ok(())
-        },
-        Err(e) => Err(io::Error::new(
-            ErrorKind::Other,
-            format!("Unable to create lint: {}", e),
-        )),
+impl<T> Context for io::Result<T> {
+    fn context<C: AsRef<str>>(self, text: C) -> Self {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => {
+                let message = format!("{}: {}", text.as_ref(), e);
+                Err(io::Error::new(ErrorKind::Other, message))
+            },
+        }
     }
 }
 
-fn open_files(lint_name: &str) -> Result<(File, File), io::Error> {
-    let project_root = clippy_project_root();
+/// Creates the files required to implement and test a new lint and runs `update_lints`.
+///
+/// # Errors
+///
+/// This function errors out if the files couldn't be created or written to.
+pub fn create(pass: Option<&str>, lint_name: Option<&str>, category: Option<&str>, msrv: bool) -> io::Result<()> {
+    let lint = LintData {
+        pass: pass.expect("`pass` argument is validated by clap"),
+        name: lint_name.expect("`name` argument is validated by clap"),
+        category: category.expect("`category` argument is validated by clap"),
+        project_root: clippy_project_root(),
+    };
 
-    let test_file_path = project_root.join("tests").join("ui").join(format!("{}.rs", lint_name));
-    let lint_file_path = project_root
-        .join("clippy_lints")
-        .join("src")
-        .join(format!("{}.rs", lint_name));
+    create_lint(&lint, msrv).context("Unable to create lint implementation")?;
+    create_test(&lint).context("Unable to create a test for the new lint")?;
+    add_lint(&lint, msrv).context("Unable to add lint to clippy_lints/src/lib.rs")
+}
 
-    if Path::new(&test_file_path).exists() {
-        return Err(io::Error::new(
-            ErrorKind::AlreadyExists,
-            format!("test file {:?} already exists", test_file_path),
-        ));
+fn create_lint(lint: &LintData<'_>, enable_msrv: bool) -> io::Result<()> {
+    let lint_contents = get_lint_file_contents(lint, enable_msrv);
+
+    let lint_path = format!("clippy_lints/src/{}.rs", lint.name);
+    write_file(lint.project_root.join(&lint_path), lint_contents.as_bytes())
+}
+
+fn create_test(lint: &LintData<'_>) -> io::Result<()> {
+    fn create_project_layout<P: Into<PathBuf>>(lint_name: &str, location: P, case: &str, hint: &str) -> io::Result<()> {
+        let mut path = location.into().join(case);
+        fs::create_dir(&path)?;
+        write_file(path.join("Cargo.toml"), get_manifest_contents(lint_name, hint))?;
+
+        path.push("src");
+        fs::create_dir(&path)?;
+        let header = format!("// compile-flags: --crate-name={}", lint_name);
+        write_file(path.join("main.rs"), get_test_file_contents(lint_name, Some(&header)))?;
+
+        Ok(())
     }
-    if Path::new(&lint_file_path).exists() {
-        return Err(io::Error::new(
-            ErrorKind::AlreadyExists,
-            format!("lint file {:?} already exists", lint_file_path),
-        ));
+
+    if lint.category == "cargo" {
+        let relative_test_dir = format!("tests/ui-cargo/{}", lint.name);
+        let test_dir = lint.project_root.join(relative_test_dir);
+        fs::create_dir(&test_dir)?;
+
+        create_project_layout(lint.name, &test_dir, "fail", "Content that triggers the lint goes here")?;
+        create_project_layout(lint.name, &test_dir, "pass", "This file should not trigger the lint")
+    } else {
+        let test_path = format!("tests/ui/{}.rs", lint.name);
+        let test_contents = get_test_file_contents(lint.name, None);
+        write_file(lint.project_root.join(test_path), test_contents)
+    }
+}
+
+fn add_lint(lint: &LintData<'_>, enable_msrv: bool) -> io::Result<()> {
+    let path = "clippy_lints/src/lib.rs";
+    let mut lib_rs = fs::read_to_string(path).context("reading")?;
+
+    let comment_start = lib_rs.find("// add lints here,").expect("Couldn't find comment");
+
+    let new_lint = if enable_msrv {
+        format!(
+            "store.register_{lint_pass}_pass(move || Box::new({module_name}::{camel_name}::new(msrv)));\n    ",
+            lint_pass = lint.pass,
+            module_name = lint.name,
+            camel_name = to_camel_case(lint.name),
+        )
+    } else {
+        format!(
+            "store.register_{lint_pass}_pass(|| Box::new({module_name}::{camel_name}));\n    ",
+            lint_pass = lint.pass,
+            module_name = lint.name,
+            camel_name = to_camel_case(lint.name),
+        )
+    };
+
+    lib_rs.insert_str(comment_start, &new_lint);
+
+    fs::write(path, lib_rs).context("writing")
+}
+
+fn write_file<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
+    fn inner(path: &Path, contents: &[u8]) -> io::Result<()> {
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?
+            .write_all(contents)
     }
 
-    let test_file = OpenOptions::new().write(true).create_new(true).open(test_file_path)?;
-    let lint_file = OpenOptions::new().write(true).create_new(true).open(lint_file_path)?;
-
-    Ok((test_file, lint_file))
+    inner(path.as_ref(), contents.as_ref()).context(format!("writing to file: {}", path.as_ref().display()))
 }
 
 fn to_camel_case(name: &str) -> String {
@@ -95,61 +133,178 @@ fn to_camel_case(name: &str) -> String {
         .collect()
 }
 
-fn get_test_file_contents(lint_name: &str) -> String {
-    format!(
-        "#![warn(clippy::{})]
+fn get_stabilisation_version() -> String {
+    fn parse_manifest(contents: &str) -> Option<String> {
+        let version = contents
+            .lines()
+            .filter_map(|l| l.split_once('='))
+            .find_map(|(k, v)| (k.trim() == "version").then(|| v.trim()))?;
+        let Some(("0", version)) = version.get(1..version.len() - 1)?.split_once('.') else {
+            return None;
+        };
+        let (minor, patch) = version.split_once('.')?;
+        Some(format!(
+            "{}.{}.0",
+            minor.parse::<u32>().ok()?,
+            patch.parse::<u32>().ok()?
+        ))
+    }
+    let contents = fs::read_to_string("Cargo.toml").expect("Unable to read `Cargo.toml`");
+    parse_manifest(&contents).expect("Unable to find package version in `Cargo.toml`")
+}
 
-fn main() {{
-    // test code goes here
-}}
-",
+fn get_test_file_contents(lint_name: &str, header_commands: Option<&str>) -> String {
+    let mut contents = format!(
+        indoc! {"
+            #![warn(clippy::{})]
+
+            fn main() {{
+                // test code goes here
+            }}
+        "},
         lint_name
+    );
+
+    if let Some(header) = header_commands {
+        contents = format!("{}\n{}", header, contents);
+    }
+
+    contents
+}
+
+fn get_manifest_contents(lint_name: &str, hint: &str) -> String {
+    format!(
+        indoc! {r#"
+            # {}
+
+            [package]
+            name = "{}"
+            version = "0.1.0"
+            publish = false
+
+            [workspace]
+        "#},
+        hint, lint_name
     )
 }
 
-fn get_lint_file_contents(
-    pass_type: &str,
-    pass_lifetimes: &str,
-    lint_name: &str,
-    camel_case_name: &str,
-    category: &str,
-    pass_import: &str,
-    context_import: &str,
-) -> String {
-    format!(
-        "use rustc_lint::{{{type}, {context_import}}};
-use rustc_session::{{declare_lint_pass, declare_tool_lint}};
-{pass_import}
+fn get_lint_file_contents(lint: &LintData<'_>, enable_msrv: bool) -> String {
+    let mut result = String::new();
 
-declare_clippy_lint! {{
-    /// **What it does:**
-    ///
-    /// **Why is this bad?**
-    ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
-    ///
-    /// ```rust
-    /// // example code
-    /// ```
-    pub {name_upper},
-    {category},
-    \"default lint description\"
-}}
+    let (pass_type, pass_lifetimes, pass_import, context_import) = match lint.pass {
+        "early" => ("EarlyLintPass", "", "use rustc_ast::ast::*;", "EarlyContext"),
+        "late" => ("LateLintPass", "<'_>", "use rustc_hir::*;", "LateContext"),
+        _ => {
+            unreachable!("`pass_type` should only ever be `early` or `late`!");
+        },
+    };
 
-declare_lint_pass!({name_camel} => [{name_upper}]);
+    let version = get_stabilisation_version();
+    let lint_name = lint.name;
+    let category = lint.category;
+    let name_camel = to_camel_case(lint.name);
+    let name_upper = lint_name.to_uppercase();
 
-impl {type}{lifetimes} for {name_camel} {{}}
-",
-        type=pass_type,
-        lifetimes=pass_lifetimes,
-        name_upper=lint_name.to_uppercase(),
-        name_camel=camel_case_name,
-        category=category,
-        pass_import=pass_import,
-        context_import=context_import
-    )
+    result.push_str(&if enable_msrv {
+        format!(
+            indoc! {"
+                use clippy_utils::msrvs;
+                {pass_import}
+                use rustc_lint::{{{context_import}, {pass_type}, LintContext}};
+                use rustc_semver::RustcVersion;
+                use rustc_session::{{declare_tool_lint, impl_lint_pass}};
+
+            "},
+            pass_type = pass_type,
+            pass_import = pass_import,
+            context_import = context_import,
+        )
+    } else {
+        format!(
+            indoc! {"
+                {pass_import}
+                use rustc_lint::{{{context_import}, {pass_type}}};
+                use rustc_session::{{declare_lint_pass, declare_tool_lint}};
+
+            "},
+            pass_import = pass_import,
+            pass_type = pass_type,
+            context_import = context_import
+        )
+    });
+
+    let _ = write!(
+        result,
+        indoc! {r#"
+            declare_clippy_lint! {{
+                /// ### What it does
+                ///
+                /// ### Why is this bad?
+                ///
+                /// ### Example
+                /// ```rust
+                /// // example code where clippy issues a warning
+                /// ```
+                /// Use instead:
+                /// ```rust
+                /// // example code which does not raise clippy warning
+                /// ```
+                #[clippy::version = "{version}"]
+                pub {name_upper},
+                {category},
+                "default lint description"
+            }}
+        "#},
+        version = version,
+        name_upper = name_upper,
+        category = category,
+    );
+
+    result.push_str(&if enable_msrv {
+        format!(
+            indoc! {"
+                pub struct {name_camel} {{
+                    msrv: Option<RustcVersion>,
+                }}
+
+                impl {name_camel} {{
+                    #[must_use]
+                    pub fn new(msrv: Option<RustcVersion>) -> Self {{
+                        Self {{ msrv }}
+                    }}
+                }}
+
+                impl_lint_pass!({name_camel} => [{name_upper}]);
+
+                impl {pass_type}{pass_lifetimes} for {name_camel} {{
+                    extract_msrv_attr!({context_import});
+                }}
+
+                // TODO: Add MSRV level to `clippy_utils/src/msrvs.rs` if needed.
+                // TODO: Add MSRV test to `tests/ui/min_rust_version_attr.rs`.
+                // TODO: Update msrv config comment in `clippy_lints/src/utils/conf.rs`
+            "},
+            pass_type = pass_type,
+            pass_lifetimes = pass_lifetimes,
+            name_upper = name_upper,
+            name_camel = name_camel,
+            context_import = context_import,
+        )
+    } else {
+        format!(
+            indoc! {"
+                declare_lint_pass!({name_camel} => [{name_upper}]);
+
+                impl {pass_type}{pass_lifetimes} for {name_camel} {{}}
+            "},
+            pass_type = pass_type,
+            pass_lifetimes = pass_lifetimes,
+            name_upper = name_upper,
+            name_camel = name_camel,
+        )
+    });
+
+    result
 }
 
 #[test]

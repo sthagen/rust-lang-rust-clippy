@@ -1,4 +1,3 @@
-#![feature(const_fn)]
 #![allow(dead_code, clippy::missing_safety_doc)]
 #![warn(clippy::new_without_default)]
 
@@ -91,6 +90,22 @@ impl Private {
     } // We don't lint private items
 }
 
+struct PrivateStruct;
+
+impl PrivateStruct {
+    pub fn new() -> PrivateStruct {
+        unimplemented!()
+    } // We don't lint public items on private structs
+}
+
+pub struct PrivateItem;
+
+impl PrivateItem {
+    fn new() -> PrivateItem {
+        unimplemented!()
+    } // We don't lint private items on public structs
+}
+
 struct Const;
 
 impl Const {
@@ -145,6 +160,54 @@ impl AllowDerive {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         unimplemented!()
+    }
+}
+
+pub struct NewNotEqualToDerive {
+    foo: i32,
+}
+
+impl NewNotEqualToDerive {
+    // This `new` implementation is not equal to a derived `Default`, so do not suggest deriving.
+    pub fn new() -> Self {
+        NewNotEqualToDerive { foo: 1 }
+    }
+}
+
+// see #6933
+pub struct FooGenerics<T>(std::marker::PhantomData<T>);
+impl<T> FooGenerics<T> {
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+}
+
+pub struct BarGenerics<T>(std::marker::PhantomData<T>);
+impl<T: Copy> BarGenerics<T> {
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+}
+
+pub mod issue7220 {
+    pub struct Foo<T> {
+        _bar: *mut T,
+    }
+
+    impl<T> Foo<T> {
+        pub fn new() -> Self {
+            todo!()
+        }
+    }
+}
+
+// see issue #8152
+// This should not create any lints
+pub struct DocHidden;
+impl DocHidden {
+    #[doc(hidden)]
+    pub fn new() -> Self {
+        DocHidden
     }
 }
 

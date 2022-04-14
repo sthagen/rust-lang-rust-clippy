@@ -1,4 +1,7 @@
-#![warn(clippy::default_trait_access)]
+// run-rustfix
+
+#![allow(unused_imports, dead_code)]
+#![deny(clippy::default_trait_access)]
 
 use std::default;
 use std::default::Default as D2;
@@ -43,27 +46,14 @@ fn main() {
 
     let s19 = <DerivedDefault as Default>::default();
 
+    let s20 = UpdateSyntax {
+        s: "foo",
+        ..Default::default()
+    };
+
     println!(
-        "[{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}], [{:?}]",
-        s1,
-        s2,
-        s3,
-        s4,
-        s5,
-        s6,
-        s7,
-        s8,
-        s9,
-        s10,
-        s11,
-        s12,
-        s13,
-        s14,
-        s15,
-        s16,
-        s17,
-        s18,
-        s19,
+        "[{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}] [{:?}]",
+        s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20,
     );
 }
 
@@ -101,3 +91,9 @@ struct ArrayDerivedDefault {
 
 #[derive(Debug, Default)]
 struct TupleStructDerivedDefault(String);
+
+#[derive(Debug, Default)]
+struct UpdateSyntax {
+    pub s: &'static str,
+    pub u: u64,
+}

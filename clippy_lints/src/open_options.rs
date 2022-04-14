@@ -1,25 +1,28 @@
-use crate::utils::{match_type, paths, span_lint, walk_ptrs_ty};
+use clippy_utils::diagnostics::span_lint;
+use clippy_utils::paths;
+use clippy_utils::ty::match_type;
+use rustc_ast::ast::LitKind;
 use rustc_hir::{Expr, ExprKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_session::{declare_lint_pass, declare_tool_lint};
 use rustc_span::source_map::{Span, Spanned};
-use syntax::ast::LitKind;
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for duplicate open options as well as combinations
+    /// ### What it does
+    /// Checks for duplicate open options as well as combinations
     /// that make no sense.
     ///
-    /// **Why is this bad?** In the best case, the code will be harder to read than
+    /// ### Why is this bad?
+    /// In the best case, the code will be harder to read than
     /// necessary. I don't know the worst case.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```rust
     /// use std::fs::OpenOptions;
     ///
     /// OpenOptions::new().read(true).truncate(true);
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub NONSENSICAL_OPEN_OPTIONS,
     correctness,
     "nonsensical combination of options for opening a file"
@@ -27,13 +30,13 @@ declare_clippy_lint! {
 
 declare_lint_pass!(OpenOptions => [NONSENSICAL_OPEN_OPTIONS]);
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for OpenOptions {
-    fn check_expr(&mut self, cx: &LateContext<'a, 'tcx>, e: &'tcx Expr<'_>) {
-        if let ExprKind::MethodCall(ref path, _, ref arguments) = e.kind {
-            let obj_ty = walk_ptrs_ty(cx.tables.expr_ty(&arguments[0]));
+impl<'tcx> LateLintPass<'tcx> for OpenOptions {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) {
+        if let ExprKind::MethodCall(path, [self_arg, ..], _) = &e.kind {
+            let obj_ty = cx.typeck_results().expr_ty(self_arg).peel_refs();
             if path.ident.name == sym!(open) && match_type(cx, obj_ty, &paths::OPEN_OPTIONS) {
                 let mut options = Vec::new();
-                get_open_options(cx, &arguments[0], &mut options);
+                get_open_options(cx, self_arg, &mut options);
                 check_open_options(cx, &options, e.span);
             }
         }
@@ -56,9 +59,9 @@ enum OpenOption {
     Append,
 }
 
-fn get_open_options(cx: &LateContext<'_, '_>, argument: &Expr<'_>, options: &mut Vec<(OpenOption, Argument)>) {
-    if let ExprKind::MethodCall(ref path, _, ref arguments) = argument.kind {
-        let obj_ty = walk_ptrs_ty(cx.tables.expr_ty(&arguments[0]));
+fn get_open_options(cx: &LateContext<'_>, argument: &Expr<'_>, options: &mut Vec<(OpenOption, Argument)>) {
+    if let ExprKind::MethodCall(path, arguments, _) = argument.kind {
+        let obj_ty = cx.typeck_results().expr_ty(&arguments[0]).peel_refs();
 
         // Only proceed if this is a call on some object of type std::fs::OpenOptions
         if match_type(cx, obj_ty, &paths::OPEN_OPTIONS) && arguments.len() >= 2 {
@@ -69,21 +72,17 @@ fn get_open_options(cx: &LateContext<'_, '_>, argument: &Expr<'_>, options: &mut
                         ..
                     } = *span
                     {
-                        if lit {
-                            Argument::True
-                        } else {
-                            Argument::False
-                        }
+                        if lit { Argument::True } else { Argument::False }
                     } else {
-                        return; // The function is called with a literal
-                                // which is not a boolean literal. This is theoretically
-                                // possible, but not very likely.
+                        // The function is called with a literal which is not a boolean literal.
+                        // This is theoretically possible, but not very likely.
+                        return;
                     }
                 },
                 _ => Argument::Unknown,
             };
 
-            match &*path.ident.as_str() {
+            match path.ident.as_str() {
                 "create" => {
                     options.push((OpenOption::Create, argument_option));
                 },
@@ -107,7 +106,7 @@ fn get_open_options(cx: &LateContext<'_, '_>, argument: &Expr<'_>, options: &mut
     }
 }
 
-fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument)], span: Span) {
+fn check_open_options(cx: &LateContext<'_>, options: &[(OpenOption, Argument)], span: Span) {
     let (mut create, mut append, mut truncate, mut read, mut write) = (false, false, false, false, false);
     let (mut create_arg, mut append_arg, mut truncate_arg, mut read_arg, mut write_arg) =
         (false, false, false, false, false);
@@ -125,7 +124,7 @@ fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument
                         "the method `create` is called more than once",
                     );
                 } else {
-                    create = true
+                    create = true;
                 }
                 create_arg = create_arg || (arg == Argument::True);
             },
@@ -138,7 +137,7 @@ fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument
                         "the method `append` is called more than once",
                     );
                 } else {
-                    append = true
+                    append = true;
                 }
                 append_arg = append_arg || (arg == Argument::True);
             },
@@ -151,7 +150,7 @@ fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument
                         "the method `truncate` is called more than once",
                     );
                 } else {
-                    truncate = true
+                    truncate = true;
                 }
                 truncate_arg = truncate_arg || (arg == Argument::True);
             },
@@ -164,7 +163,7 @@ fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument
                         "the method `read` is called more than once",
                     );
                 } else {
-                    read = true
+                    read = true;
                 }
                 read_arg = read_arg || (arg == Argument::True);
             },
@@ -177,7 +176,7 @@ fn check_open_options(cx: &LateContext<'_, '_>, options: &[(OpenOption, Argument
                         "the method `write` is called more than once",
                     );
                 } else {
-                    write = true
+                    write = true;
                 }
                 write_arg = write_arg || (arg == Argument::True);
             },

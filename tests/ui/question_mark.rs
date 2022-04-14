@@ -1,3 +1,7 @@
+// run-rustfix
+#![allow(unreachable_code)]
+#![allow(clippy::unnecessary_wraps)]
+
 fn some_func(a: Option<u32>) -> Option<u32> {
     if a.is_none() {
         return None;
@@ -58,6 +62,12 @@ impl CopyStruct {
             self.opt
         };
 
+        let _ = if let Some(x) = self.opt {
+            x
+        } else {
+            return None;
+        };
+
         self.opt
     }
 }
@@ -90,11 +100,96 @@ impl MoveStruct {
         }
         Some(Vec::new())
     }
+
+    pub fn if_let_ref_func(self) -> Option<Vec<u32>> {
+        let v: &Vec<_> = if let Some(ref v) = self.opt {
+            v
+        } else {
+            return None;
+        };
+
+        Some(v.clone())
+    }
+
+    pub fn if_let_mov_func(self) -> Option<Vec<u32>> {
+        let v = if let Some(v) = self.opt {
+            v
+        } else {
+            return None;
+        };
+
+        Some(v)
+    }
+}
+
+fn func() -> Option<i32> {
+    fn f() -> Option<String> {
+        Some(String::new())
+    }
+
+    if f().is_none() {
+        return None;
+    }
+
+    Some(0)
+}
+
+fn func_returning_result() -> Result<i32, i32> {
+    Ok(1)
+}
+
+fn result_func(x: Result<i32, i32>) -> Result<i32, i32> {
+    let _ = if let Ok(x) = x { x } else { return x };
+
+    if x.is_err() {
+        return x;
+    }
+
+    // No warning
+    let y = if let Ok(x) = x {
+        x
+    } else {
+        return Err(0);
+    };
+
+    // issue #7859
+    // no warning
+    let _ = if let Ok(x) = func_returning_result() {
+        x
+    } else {
+        return Err(0);
+    };
+
+    // no warning
+    if func_returning_result().is_err() {
+        return func_returning_result();
+    }
+
+    Ok(y)
+}
+
+// see issue #8019
+pub enum NotOption {
+    None,
+    First,
+    AfterFirst,
+}
+
+fn obj(_: i32) -> Result<(), NotOption> {
+    Err(NotOption::First)
+}
+
+fn f() -> NotOption {
+    if obj(2).is_err() {
+        return NotOption::None;
+    }
+    NotOption::First
 }
 
 fn main() {
     some_func(Some(42));
     some_func(None);
+    some_other_func(Some(42));
 
     let copy_struct = CopyStruct { opt: Some(54) };
     copy_struct.func();
@@ -108,4 +203,9 @@ fn main() {
 
     let so = SeemsOption::Some(45);
     returns_something_similar_to_option(so);
+
+    func();
+
+    let _ = result_func(Ok(42));
+    let _ = f();
 }

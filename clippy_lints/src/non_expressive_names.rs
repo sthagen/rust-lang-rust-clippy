@@ -1,64 +1,70 @@
-use crate::utils::{span_lint, span_lint_and_then};
-use rustc_lint::{EarlyContext, EarlyLintPass};
+use clippy_utils::diagnostics::{span_lint, span_lint_and_then};
+use rustc_ast::ast::{
+    self, Arm, AssocItem, AssocItemKind, Attribute, Block, FnDecl, Item, ItemKind, Local, Pat, PatKind,
+};
+use rustc_ast::visit::{walk_block, walk_expr, walk_pat, Visitor};
+use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
+use rustc_middle::lint::in_external_macro;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::source_map::Span;
-use rustc_span::symbol::SymbolStr;
+use rustc_span::sym;
+use rustc_span::symbol::{Ident, Symbol};
 use std::cmp::Ordering;
-use syntax::ast::*;
-use syntax::attr;
-use syntax::visit::{walk_block, walk_expr, walk_pat, Visitor};
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for names that are very similar and thus confusing.
+    /// ### What it does
+    /// Checks for names that are very similar and thus confusing.
     ///
-    /// **Why is this bad?** It's hard to distinguish between names that differ only
+    /// ### Why is this bad?
+    /// It's hard to distinguish between names that differ only
     /// by a single character.
     ///
-    /// **Known problems:** None?
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```ignore
     /// let checked_exp = something;
     /// let checked_expr = something_else;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub SIMILAR_NAMES,
     pedantic,
     "similarly named items and bindings"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for too many variables whose name consists of a
+    /// ### What it does
+    /// Checks for too many variables whose name consists of a
     /// single character.
     ///
-    /// **Why is this bad?** It's hard to memorize what a variable means without a
+    /// ### Why is this bad?
+    /// It's hard to memorize what a variable means without a
     /// descriptive name.
     ///
-    /// **Known problems:** None?
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```ignore
     /// let (a, b, c, d, e, f, g) = (...);
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub MANY_SINGLE_CHAR_NAMES,
-    style,
+    pedantic,
     "too many single character bindings"
 }
 
 declare_clippy_lint! {
-    /// **What it does:** Checks if you have variables whose name consists of just
+    /// ### What it does
+    /// Checks if you have variables whose name consists of just
     /// underscores and digits.
     ///
-    /// **Why is this bad?** It's hard to memorize what a variable means without a
+    /// ### Why is this bad?
+    /// It's hard to memorize what a variable means without a
     /// descriptive name.
     ///
-    /// **Known problems:** None?
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```rust
     /// let _1 = 1;
     /// let ___1 = 1;
     /// let __1___2 = 11;
     /// ```
+    #[clippy::version = "pre 1.29.0"]
     pub JUST_UNDERSCORES_AND_DIGITS,
     style,
     "unclear name"
@@ -72,10 +78,10 @@ pub struct NonExpressiveNames {
 impl_lint_pass!(NonExpressiveNames => [SIMILAR_NAMES, MANY_SINGLE_CHAR_NAMES, JUST_UNDERSCORES_AND_DIGITS]);
 
 struct ExistingName {
-    interned: SymbolStr,
+    interned: Symbol,
     span: Span,
     len: usize,
-    whitelist: &'static [&'static str],
+    exemptions: &'static [&'static str],
 }
 
 struct SimilarNamesLocalVisitor<'a, 'tcx> {
@@ -91,7 +97,7 @@ impl<'a, 'tcx> SimilarNamesLocalVisitor<'a, 'tcx> {
     fn check_single_char_names(&self) {
         let num_single_char_names = self.single_char_names.iter().flatten().count();
         let threshold = self.lint.single_char_binding_names_threshold;
-        if num_single_char_names as u64 >= threshold {
+        if num_single_char_names as u64 > threshold {
             let span = self
                 .single_char_names
                 .iter()
@@ -114,7 +120,7 @@ impl<'a, 'tcx> SimilarNamesLocalVisitor<'a, 'tcx> {
 // this list contains lists of names that are allowed to be similar
 // the assumption is that no name is ever contained in multiple lists.
 #[rustfmt::skip]
-const WHITELIST: &[&[&str]] = &[
+const ALLOWED_TO_BE_SIMILAR: &[&[&str]] = &[
     &["parsed", "parser"],
     &["lhs", "rhs"],
     &["tx", "rx"],
@@ -122,6 +128,8 @@ const WHITELIST: &[&[&str]] = &[
     &["args", "arms"],
     &["qpath", "path"],
     &["lit", "lint"],
+    &["wparam", "lparam"],
+    &["iter", "item"],
 ];
 
 struct SimilarNamesNameVisitor<'a, 'tcx, 'b>(&'b mut SimilarNamesLocalVisitor<'a, 'tcx>);
@@ -129,8 +137,12 @@ struct SimilarNamesNameVisitor<'a, 'tcx, 'b>(&'b mut SimilarNamesLocalVisitor<'a
 impl<'a, 'tcx, 'b> Visitor<'tcx> for SimilarNamesNameVisitor<'a, 'tcx, 'b> {
     fn visit_pat(&mut self, pat: &'tcx Pat) {
         match pat.kind {
-            PatKind::Ident(_, ident, _) => self.check_ident(ident),
-            PatKind::Struct(_, ref fields, _) => {
+            PatKind::Ident(_, ident, _) => {
+                if !pat.span.from_expansion() {
+                    self.check_ident(ident);
+                }
+            },
+            PatKind::Struct(_, _, ref fields, _) => {
                 for field in fields {
                     if !field.is_shorthand {
                         self.visit_pat(&field.pat);
@@ -143,23 +155,20 @@ impl<'a, 'tcx, 'b> Visitor<'tcx> for SimilarNamesNameVisitor<'a, 'tcx, 'b> {
             _ => walk_pat(self, pat),
         }
     }
-    fn visit_mac(&mut self, _mac: &Mac) {
-        // do not check macs
-    }
 }
 
 #[must_use]
-fn get_whitelist(interned_name: &str) -> Option<&'static [&'static str]> {
-    for &allow in WHITELIST {
-        if whitelisted(interned_name, allow) {
-            return Some(allow);
+fn get_exemptions(interned_name: &str) -> Option<&'static [&'static str]> {
+    for &list in ALLOWED_TO_BE_SIMILAR {
+        if allowed_to_be_similar(interned_name, list) {
+            return Some(list);
         }
     }
     None
 }
 
 #[must_use]
-fn whitelisted(interned_name: &str, list: &[&str]) -> bool {
+fn allowed_to_be_similar(interned_name: &str, list: &[&str]) -> bool {
     list.iter()
         .any(|&name| interned_name.starts_with(name) || interned_name.ends_with(name))
 }
@@ -188,13 +197,17 @@ impl<'a, 'tcx, 'b> SimilarNamesNameVisitor<'a, 'tcx, 'b> {
         if interned_name.chars().any(char::is_uppercase) {
             return;
         }
-        if interned_name.chars().all(|c| c.is_digit(10) || c == '_') {
+        if interned_name.chars().all(|c| c.is_ascii_digit() || c == '_') {
             span_lint(
                 self.0.cx,
                 JUST_UNDERSCORES_AND_DIGITS,
                 ident.span,
                 "consider choosing a more descriptive name",
             );
+            return;
+        }
+        if interned_name.starts_with('_') {
+            // these bindings are typically unused or represent an ignored portion of a destructuring pattern
             return;
         }
         let count = interned_name.chars().count();
@@ -205,24 +218,28 @@ impl<'a, 'tcx, 'b> SimilarNamesNameVisitor<'a, 'tcx, 'b> {
             return;
         }
         for existing_name in &self.0.names {
-            if whitelisted(&interned_name, existing_name.whitelist) {
+            if allowed_to_be_similar(interned_name, existing_name.exemptions) {
                 continue;
             }
-            let mut split_at = None;
             match existing_name.len.cmp(&count) {
                 Ordering::Greater => {
-                    if existing_name.len - count != 1 || levenstein_not_1(&interned_name, &existing_name.interned) {
+                    if existing_name.len - count != 1
+                        || levenstein_not_1(interned_name, existing_name.interned.as_str())
+                    {
                         continue;
                     }
                 },
                 Ordering::Less => {
-                    if count - existing_name.len != 1 || levenstein_not_1(&existing_name.interned, &interned_name) {
+                    if count - existing_name.len != 1
+                        || levenstein_not_1(existing_name.interned.as_str(), interned_name)
+                    {
                         continue;
                     }
                 },
                 Ordering::Equal => {
                     let mut interned_chars = interned_name.chars();
-                    let mut existing_chars = existing_name.interned.chars();
+                    let interned_str = existing_name.interned.as_str();
+                    let mut existing_chars = interned_str.chars();
                     let first_i = interned_chars.next().expect("we know we have at least one char");
                     let first_e = existing_chars.next().expect("we know we have at least one char");
                     let eq_or_numeric = |(a, b): (char, char)| a == b || a.is_numeric() && b.is_numeric();
@@ -254,7 +271,6 @@ impl<'a, 'tcx, 'b> SimilarNamesNameVisitor<'a, 'tcx, 'b> {
                                 // or too many chars differ (foo_x, boo_y) or (foox, booy)
                                 continue;
                             }
-                            split_at = interned_name.char_indices().rev().next().map(|(i, _)| i);
                         }
                     } else {
                         let second_i = interned_chars.next().expect("we know we have at least two chars");
@@ -267,7 +283,6 @@ impl<'a, 'tcx, 'b> SimilarNamesNameVisitor<'a, 'tcx, 'b> {
                             // or too many chars differ (x_foo, y_boo) or (xfoo, yboo)
                             continue;
                         }
-                        split_at = interned_name.chars().next().map(char::len_utf8);
                     }
                 },
             }
@@ -278,24 +293,13 @@ impl<'a, 'tcx, 'b> SimilarNamesNameVisitor<'a, 'tcx, 'b> {
                 "binding's name is too similar to existing binding",
                 |diag| {
                     diag.span_note(existing_name.span, "existing binding defined here");
-                    if let Some(split) = split_at {
-                        diag.span_help(
-                            ident.span,
-                            &format!(
-                                "separate the discriminating character by an \
-                                 underscore like: `{}_{}`",
-                                &interned_name[..split],
-                                &interned_name[split..]
-                            ),
-                        );
-                    }
                 },
             );
             return;
         }
         self.0.names.push(ExistingName {
-            whitelist: get_whitelist(&interned_name).unwrap_or(&[]),
-            interned: interned_name,
+            exemptions: get_exemptions(interned_name).unwrap_or(&[]),
+            interned: ident.name,
             span: ident.span,
             len: count,
         });
@@ -315,8 +319,11 @@ impl<'a, 'b> SimilarNamesLocalVisitor<'a, 'b> {
 
 impl<'a, 'tcx> Visitor<'tcx> for SimilarNamesLocalVisitor<'a, 'tcx> {
     fn visit_local(&mut self, local: &'tcx Local) {
-        if let Some(ref init) = local.init {
-            self.apply(|this| walk_expr(this, &**init));
+        if let Some((init, els)) = &local.kind.init_else_opt() {
+            self.apply(|this| walk_expr(this, init));
+            if let Some(els) = els {
+                self.apply(|this| walk_block(this, els));
+            }
         }
         // add the pattern after the expression because the bindings aren't available
         // yet in the init
@@ -345,27 +352,42 @@ impl<'a, 'tcx> Visitor<'tcx> for SimilarNamesLocalVisitor<'a, 'tcx> {
     fn visit_item(&mut self, _: &Item) {
         // do not recurse into inner items
     }
-    fn visit_mac(&mut self, _mac: &Mac) {
-        // do not check macs
-    }
 }
 
 impl EarlyLintPass for NonExpressiveNames {
     fn check_item(&mut self, cx: &EarlyContext<'_>, item: &Item) {
-        if let ItemKind::Fn(ref sig, _, Some(ref blk)) = item.kind {
+        if in_external_macro(cx.sess(), item.span) {
+            return;
+        }
+
+        if let ItemKind::Fn(box ast::Fn {
+            ref sig,
+            body: Some(ref blk),
+            ..
+        }) = item.kind
+        {
             do_check(self, cx, &item.attrs, &sig.decl, blk);
         }
     }
 
     fn check_impl_item(&mut self, cx: &EarlyContext<'_>, item: &AssocItem) {
-        if let AssocItemKind::Fn(ref sig, _, Some(ref blk)) = item.kind {
+        if in_external_macro(cx.sess(), item.span) {
+            return;
+        }
+
+        if let AssocItemKind::Fn(box ast::Fn {
+            ref sig,
+            body: Some(ref blk),
+            ..
+        }) = item.kind
+        {
             do_check(self, cx, &item.attrs, &sig.decl, blk);
         }
     }
 }
 
 fn do_check(lint: &mut NonExpressiveNames, cx: &EarlyContext<'_>, attrs: &[Attribute], decl: &FnDecl, blk: &Block) {
-    if !attr::contains_name(attrs, sym!(test)) {
+    if !attrs.iter().any(|attr| attr.has_name(sym::test)) {
         let mut visitor = SimilarNamesLocalVisitor {
             names: Vec::new(),
             cx,
@@ -397,11 +419,10 @@ fn levenstein_not_1(a_name: &str, b_name: &str) -> bool {
         if let Some(b2) = b_chars.next() {
             // check if there's just one character inserted
             return a != b2 || a_chars.ne(b_chars);
-        } else {
-            // tuple
-            // ntuple
-            return true;
         }
+        // tuple
+        // ntuple
+        return true;
     }
     // for item in items
     true

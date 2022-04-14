@@ -3,8 +3,8 @@
 import json
 import os
 import sys
-
-from lintlib import log
+import logging as log
+log.basicConfig(level=log.INFO, format='%(levelname)s: %(message)s')
 
 
 def key(v):
@@ -12,6 +12,8 @@ def key(v):
         return float('inf')
     if v == 'stable':
         return sys.maxsize
+    if v == 'beta':
+        return sys.maxsize - 1
 
     v = v.replace('v', '').replace('rust-', '')
 
@@ -24,7 +26,7 @@ def key(v):
 
 def main():
     if len(sys.argv) < 2:
-        print("Error: specify output directory")
+        log.error("specify output directory")
         return
 
     outdir = sys.argv[1]

@@ -2,8 +2,13 @@
 //! compilation error.
 //! The .stderr output of this test should be empty. Otherwise it's a bug somewhere.
 
+// aux-build:helper.rs
+
 #![warn(clippy::missing_const_for_fn)]
 #![feature(start)]
+#![feature(custom_inner_attributes)]
+
+extern crate helper;
 
 struct Game;
 
@@ -78,7 +83,7 @@ mod with_drop {
 
     impl A {
         // This can not be const because the type implements `Drop`.
-        pub fn a(self) -> B {
+        pub fn b(self) -> B {
             B
         }
     }
@@ -88,5 +93,29 @@ mod with_drop {
         pub fn a(self, a: A) -> B {
             B
         }
+    }
+}
+
+fn const_generic_params<T, const N: usize>(t: &[T; N]) -> &[T; N] {
+    t
+}
+
+fn const_generic_return<T, const N: usize>(t: &[T]) -> &[T; N] {
+    let p = t.as_ptr() as *const [T; N];
+
+    unsafe { &*p }
+}
+
+// Do not lint this because it calls a function whose constness is unstable.
+fn unstably_const_fn() {
+    helper::unstably_const_fn()
+}
+
+mod const_fn_stabilized_after_msrv {
+    #![clippy::msrv = "1.46.0"]
+
+    // Do not lint this because `u8::is_ascii_digit` is stabilized as a const function in 1.47.0.
+    fn const_fn_stabilized_after_msrv(byte: u8) {
+        byte.is_ascii_digit();
     }
 }

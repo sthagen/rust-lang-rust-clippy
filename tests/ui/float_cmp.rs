@@ -1,5 +1,11 @@
 #![warn(clippy::float_cmp)]
-#![allow(unused, clippy::no_effect, clippy::unnecessary_operation, clippy::cast_lossless)]
+#![allow(
+    unused,
+    clippy::no_effect,
+    clippy::op_ref,
+    clippy::unnecessary_operation,
+    clippy::cast_lossless
+)]
 
 use std::ops::Add;
 
@@ -14,19 +20,11 @@ where
 }
 
 fn eq_fl(x: f32, y: f32) -> bool {
-    if x.is_nan() {
-        y.is_nan()
-    } else {
-        x == y
-    } // no error, inside "eq" fn
+    if x.is_nan() { y.is_nan() } else { x == y } // no error, inside "eq" fn
 }
 
 fn fl_eq(x: f32, y: f32) -> bool {
-    if x.is_nan() {
-        y.is_nan()
-    } else {
-        x == y
-    } // no error, inside "eq" fn
+    if x.is_nan() { y.is_nan() } else { x == y } // no error, inside "eq" fn
 }
 
 struct X {
@@ -45,8 +43,8 @@ impl PartialEq for X {
 
 fn main() {
     ZERO == 0f32; //no error, comparison with zero is ok
-    1.0f32 != ::std::f32::INFINITY; // also comparison with infinity
-    1.0f32 != ::std::f32::NEG_INFINITY; // and negative infinity
+    1.0f32 != f32::INFINITY; // also comparison with infinity
+    1.0f32 != f32::NEG_INFINITY; // and negative infinity
     ZERO == 0.0; //no error, comparison with zero is ok
     ZERO + ZERO != 1.0; //no error, comparison with zero is ok
 
@@ -77,6 +75,21 @@ fn main() {
 
     assert_eq!(a, b); // no errors
 
+    const ZERO_ARRAY: [f32; 2] = [0.0, 0.0];
+    const NON_ZERO_ARRAY: [f32; 2] = [0.0, 0.1];
+
+    let i = 0;
+    let j = 1;
+
+    ZERO_ARRAY[i] == NON_ZERO_ARRAY[j]; // ok, because lhs is zero regardless of i
+    NON_ZERO_ARRAY[i] == NON_ZERO_ARRAY[j];
+
+    let a1: [f32; 1] = [0.0];
+    let a2: [f32; 1] = [1.1];
+
+    a1 == a2;
+    a1[0] == a2[0];
+
     // no errors - comparing signums is ok
     let x32 = 3.21f32;
     1.23f32.signum() == x32.signum();
@@ -95,4 +108,8 @@ fn main() {
     1.23f64.signum() != x64.signum();
     1.23f64.signum() != -(x64.signum());
     1.23f64.signum() != 3.21f64.signum();
+
+    // the comparison should also look through references
+    &0.0 == &ZERO;
+    &&&&0.0 == &&&&ZERO;
 }

@@ -5,7 +5,8 @@
     clippy::never_loop,
     clippy::no_effect,
     clippy::unused_unit,
-    clippy::zero_divided_by_zero
+    clippy::zero_divided_by_zero,
+    clippy::branches_sharing_code
 )]
 
 struct Foo {
@@ -78,7 +79,7 @@ fn if_same_then_else() {
     let _ = if true { 0.0 } else { -0.0 };
 
     // Different NaNs
-    let _ = if true { 0.0 / 0.0 } else { std::f32::NAN };
+    let _ = if true { 0.0 / 0.0 } else { f32::NAN };
 
     if true {
         foo();
@@ -141,5 +142,17 @@ fn func() {
 }
 
 fn f(val: &[u8]) {}
+
+mod issue_5698 {
+    fn mul_not_always_commutative(x: i32, y: i32) -> i32 {
+        if x == 42 {
+            x * y
+        } else if x == 21 {
+            y * x
+        } else {
+            0
+        }
+    }
+}
 
 fn main() {}

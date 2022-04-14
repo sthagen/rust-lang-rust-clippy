@@ -11,13 +11,12 @@
 
 #![deny(clippy::unused_unit)]
 #![allow(dead_code)]
+#![allow(clippy::from_over_into)]
 
 struct Unitter;
 impl Unitter {
-    // try to disorient the lint with multiple unit returns and newlines
     #[allow(clippy::no_effect)]
-    pub fn get_unit<F: Fn() -> (), G>(&self, f: F, _g: G) ->
-        ()
+    pub fn get_unit<F: Fn() -> (), G>(&self, f: F, _g: G) -> ()
     where G: Fn() -> () {
         let _y: &dyn Fn() -> () = &f;
         (); // this should not lint, as it's not in return type position
@@ -29,6 +28,20 @@ impl Into<()> for Unitter {
     fn into(self) -> () {
         ()
     }
+}
+
+trait Trait {
+    fn redundant<F: FnOnce() -> (), G, H>(&self, _f: F, _g: G, _h: H)
+    where
+        G: FnMut() -> (),
+        H: Fn() -> ();
+}
+
+impl Trait for Unitter {
+    fn redundant<F: FnOnce() -> (), G, H>(&self, _f: F, _g: G, _h: H)
+    where
+        G: FnMut() -> (),
+        H: Fn() -> () {}
 }
 
 fn return_unit() -> () { () }
@@ -57,4 +70,20 @@ fn foo() {
     foo! {
         recv(rx) -> _x => ()
     }
+}
+
+#[rustfmt::skip]
+fn test()->(){}
+
+#[rustfmt::skip]
+fn test2() ->(){}
+
+#[rustfmt::skip]
+fn test3()-> (){}
+
+fn macro_expr() {
+    macro_rules! e {
+        () => (());
+    }
+    e!()
 }

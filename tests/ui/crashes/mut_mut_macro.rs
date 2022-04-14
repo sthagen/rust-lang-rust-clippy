@@ -1,5 +1,3 @@
-// run-pass
-
 #![deny(clippy::mut_mut, clippy::zero_ptr, clippy::cmp_nan)]
 #![allow(dead_code)]
 
@@ -16,7 +14,7 @@
 const BAA: *const i32 = 0 as *const i32;
 static mut BAR: *const i32 = BAA;
 static mut FOO: *const i32 = 0 as *const i32;
-static mut BUH: bool = 42.0 < std::f32::NAN;
+static mut BUH: bool = 42.0 < f32::NAN;
 
 #[allow(unused_variables, unused_mut)]
 fn main() {
@@ -32,5 +30,5 @@ fn main() {
     assert_eq!(*MUT_COUNT, 1);
     */
     // FIXME: don't lint in array length, requires `check_body`
-    //let _ = [""; (42.0 < std::f32::NAN) as usize];
+    //let _ = [""; (42.0 < f32::NAN) as usize];
 }

@@ -1,18 +1,21 @@
-use crate::utils::{snippet, span_lint_and_then};
+use clippy_utils::diagnostics::span_lint_and_then;
+use clippy_utils::source::snippet;
+use clippy_utils::{meets_msrv, msrvs};
+use rustc_ast::ast::{Item, ItemKind, Ty, TyKind};
 use rustc_errors::Applicability;
 use rustc_lint::{EarlyContext, EarlyLintPass};
-use rustc_session::{declare_lint_pass, declare_tool_lint};
-use syntax::ast::*;
+use rustc_semver::RustcVersion;
+use rustc_session::{declare_tool_lint, impl_lint_pass};
 
 declare_clippy_lint! {
-    /// **What it does:** Checks for constants and statics with an explicit `'static` lifetime.
+    /// ### What it does
+    /// Checks for constants and statics with an explicit `'static` lifetime.
     ///
-    /// **Why is this bad?** Adding `'static` to every reference can create very
+    /// ### Why is this bad?
+    /// Adding `'static` to every reference can create very
     /// complicated types.
     ///
-    /// **Known problems:** None.
-    ///
-    /// **Example:**
+    /// ### Example
     /// ```ignore
     /// const FOO: &'static [(&'static str, &'static str, fn(&Bar) -> bool)] =
     /// &[...]
@@ -24,12 +27,24 @@ declare_clippy_lint! {
     ///  const FOO: &[(&str, &str, fn(&Bar) -> bool)] = &[...]
     ///  static FOO: &[(&str, &str, fn(&Bar) -> bool)] = &[...]
     /// ```
+    #[clippy::version = "1.37.0"]
     pub REDUNDANT_STATIC_LIFETIMES,
     style,
     "Using explicit `'static` lifetime for constants or statics when elision rules would allow omitting them."
 }
 
-declare_lint_pass!(RedundantStaticLifetimes => [REDUNDANT_STATIC_LIFETIMES]);
+pub struct RedundantStaticLifetimes {
+    msrv: Option<RustcVersion>,
+}
+
+impl RedundantStaticLifetimes {
+    #[must_use]
+    pub fn new(msrv: Option<RustcVersion>) -> Self {
+        Self { msrv }
+    }
+}
+
+impl_lint_pass!(RedundantStaticLifetimes => [REDUNDANT_STATIC_LIFETIMES]);
 
 impl RedundantStaticLifetimes {
     // Recursively visit types
@@ -53,14 +68,20 @@ impl RedundantStaticLifetimes {
                             if lifetime.ident.name == rustc_span::symbol::kw::StaticLifetime {
                                 let snip = snippet(cx, borrow_type.ty.span, "<type>");
                                 let sugg = format!("&{}", snip);
-                                span_lint_and_then(cx, REDUNDANT_STATIC_LIFETIMES, lifetime.ident.span, reason, |db| {
-                                    db.span_suggestion(
-                                        ty.span,
-                                        "consider removing `'static`",
-                                        sugg,
-                                        Applicability::MachineApplicable, //snippet
-                                    );
-                                });
+                                span_lint_and_then(
+                                    cx,
+                                    REDUNDANT_STATIC_LIFETIMES,
+                                    lifetime.ident.span,
+                                    reason,
+                                    |diag| {
+                                        diag.span_suggestion(
+                                            ty.span,
+                                            "consider removing `'static`",
+                                            sugg,
+                                            Applicability::MachineApplicable, //snippet
+                                        );
+                                    },
+                                );
                             }
                         },
                         _ => {},
@@ -78,16 +99,22 @@ impl RedundantStaticLifetimes {
 
 impl EarlyLintPass for RedundantStaticLifetimes {
     fn check_item(&mut self, cx: &EarlyContext<'_>, item: &Item) {
+        if !meets_msrv(self.msrv.as_ref(), &msrvs::STATIC_IN_CONST) {
+            return;
+        }
+
         if !item.span.from_expansion() {
-            if let ItemKind::Const(ref var_type, _) = item.kind {
-                self.visit_type(var_type, cx, "Constants have by default a `'static` lifetime");
+            if let ItemKind::Const(_, ref var_type, _) = item.kind {
+                self.visit_type(var_type, cx, "constants have by default a `'static` lifetime");
                 // Don't check associated consts because `'static` cannot be elided on those (issue
                 // #2438)
             }
 
             if let ItemKind::Static(ref var_type, _, _) = item.kind {
-                self.visit_type(var_type, cx, "Statics have by default a `'static` lifetime");
+                self.visit_type(var_type, cx, "statics have by default a `'static` lifetime");
             }
         }
     }
+
+    extract_msrv_attr!(EarlyContext);
 }
