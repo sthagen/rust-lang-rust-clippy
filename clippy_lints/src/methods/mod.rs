@@ -43,6 +43,7 @@ mod map_flatten;
 mod map_identity;
 mod map_unwrap_or;
 mod needless_option_as_deref;
+mod needless_option_take;
 mod ok_expect;
 mod option_as_ref_deref;
 mod option_map_or_none;
@@ -1266,7 +1267,7 @@ declare_clippy_lint! {
     #[clippy::version = "1.55.0"]
     pub EXTEND_WITH_DRAIN,
     perf,
-    "using vec.append(&mut vec) to move the full range of a vecor to another"
+    "using vec.append(&mut vec) to move the full range of a vector to another"
 }
 
 declare_clippy_lint! {
@@ -2100,7 +2101,7 @@ declare_clippy_lint! {
     /// using `.collect::<String>()` over `.collect::<Vec<String>>().join("")`
     /// will prevent loop unrolling and will result in a negative performance impact.
     ///
-    /// Additionlly, differences have been observed between aarch64 and x86_64 assembly output,
+    /// Additionally, differences have been observed between aarch64 and x86_64 assembly output,
     /// with aarch64 tending to producing faster assembly in more cases when using `.collect::<String>()`
     #[clippy::version = "1.61.0"]
     pub UNNECESSARY_JOIN,
@@ -2160,6 +2161,26 @@ declare_clippy_lint! {
     pub IS_DIGIT_ASCII_RADIX,
     style,
     "use of `char::is_digit(..)` with literal radix of 10 or 16"
+}
+
+declare_clippy_lint! {
+    ///
+    /// ### Why is this bad?
+    ///
+    /// ### Example
+    /// ```rust
+    /// let x = Some(3);
+    /// x.as_ref().take();
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// let x = Some(3);
+    /// x.as_ref();
+    /// ```
+    #[clippy::version = "1.61.0"]
+    pub NEEDLESS_OPTION_TAKE,
+    complexity,
+    "using `.as_ref().take()` on a temporary value"
 }
 
 pub struct Methods {
@@ -2251,6 +2272,7 @@ impl_lint_pass!(Methods => [
     ERR_EXPECT,
     NEEDLESS_OPTION_AS_DEREF,
     IS_DIGIT_ASCII_RADIX,
+    NEEDLESS_OPTION_TAKE,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -2623,6 +2645,7 @@ fn check_methods<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>, msrv: Optio
                     }
                 }
             },
+            ("take", []) => needless_option_take::check(cx, expr, recv),
             ("to_os_string" | "to_owned" | "to_path_buf" | "to_vec", []) => {
                 implicit_clone::check(cx, name, expr, recv);
             },

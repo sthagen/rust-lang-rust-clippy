@@ -181,6 +181,7 @@ mod bool_assert_comparison;
 mod booleans;
 mod borrow_as_ptr;
 mod bytecount;
+mod bytes_count_to_len;
 mod cargo;
 mod case_sensitive_file_extension_comparisons;
 mod casts;
@@ -209,6 +210,7 @@ mod double_parens;
 mod drop_forget_ref;
 mod duration_subsec;
 mod else_if_without_else;
+mod empty_drop;
 mod empty_enum;
 mod empty_structs_with_brackets;
 mod entry;
@@ -502,7 +504,6 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     {
         store.register_early_pass(|| Box::new(utils::internal_lints::ClippyLintsInternal));
         store.register_early_pass(|| Box::new(utils::internal_lints::ProduceIce));
-        store.register_late_pass(|| Box::new(utils::inspector::DeepCodeInspector));
         store.register_late_pass(|| Box::new(utils::internal_lints::CollapsibleCalls));
         store.register_late_pass(|| Box::new(utils::internal_lints::CompilerLintFunctions::new()));
         store.register_late_pass(|| Box::new(utils::internal_lints::IfChainStyle));
@@ -514,8 +515,14 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         store.register_late_pass(|| Box::new(utils::internal_lints::MsrvAttrImpl));
     }
 
+    store.register_late_pass(|| Box::new(utils::dump_hir::DumpHir));
     store.register_late_pass(|| Box::new(utils::author::Author));
-    store.register_late_pass(|| Box::new(await_holding_invalid::AwaitHolding));
+    let await_holding_invalid_types = conf.await_holding_invalid_types.clone();
+    store.register_late_pass(move || {
+        Box::new(await_holding_invalid::AwaitHolding::new(
+            await_holding_invalid_types.clone(),
+        ))
+    });
     store.register_late_pass(|| Box::new(serde_api::SerdeApi));
     let vec_box_size_threshold = conf.vec_box_size_threshold;
     let type_complexity_threshold = conf.type_complexity_threshold;
@@ -816,6 +823,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(move || Box::new(disallowed_methods::DisallowedMethods::new(disallowed_methods.clone())));
     store.register_early_pass(|| Box::new(asm_syntax::InlineAsmX86AttSyntax));
     store.register_early_pass(|| Box::new(asm_syntax::InlineAsmX86IntelSyntax));
+    store.register_late_pass(|| Box::new(empty_drop::EmptyDrop));
     store.register_late_pass(|| Box::new(strings::StrToString));
     store.register_late_pass(|| Box::new(strings::StringToString));
     store.register_late_pass(|| Box::new(zero_sized_map_values::ZeroSizedMapValues));
@@ -875,6 +883,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(unnecessary_owned_empty_strings::UnnecessaryOwnedEmptyStrings));
     store.register_early_pass(|| Box::new(pub_use::PubUse));
     store.register_late_pass(|| Box::new(format_push_string::FormatPushString));
+    store.register_late_pass(|| Box::new(bytes_count_to_len::BytesCountToLen));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
