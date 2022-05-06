@@ -130,12 +130,10 @@ impl Constant {
         match (left, right) {
             (&Self::Str(ref ls), &Self::Str(ref rs)) => Some(ls.cmp(rs)),
             (&Self::Char(ref l), &Self::Char(ref r)) => Some(l.cmp(r)),
-            (&Self::Int(l), &Self::Int(r)) => {
-                if let ty::Int(int_ty) = *cmp_type.kind() {
-                    Some(sext(tcx, l, int_ty).cmp(&sext(tcx, r, int_ty)))
-                } else {
-                    Some(l.cmp(&r))
-                }
+            (&Self::Int(l), &Self::Int(r)) => match *cmp_type.kind() {
+                ty::Int(int_ty) => Some(sext(tcx, l, int_ty).cmp(&sext(tcx, r, int_ty))),
+                ty::Uint(_) => Some(l.cmp(&r)),
+                _ => bug!("Not an int type"),
             },
             (&Self::F64(l), &Self::F64(r)) => l.partial_cmp(&r),
             (&Self::F32(l), &Self::F32(r)) => l.partial_cmp(&r),
@@ -179,7 +177,7 @@ impl Constant {
 }
 
 /// Parses a `LitKind` to a `Constant`.
-pub fn lit_to_constant(lit: &LitKind, ty: Option<Ty<'_>>) -> Constant {
+pub fn lit_to_mir_constant(lit: &LitKind, ty: Option<Ty<'_>>) -> Constant {
     match *lit {
         LitKind::Str(ref is, _) => Constant::Str(is.to_string()),
         LitKind::Byte(b) => Constant::Int(u128::from(b)),
@@ -301,7 +299,7 @@ impl<'a, 'tcx> ConstEvalLateContext<'a, 'tcx> {
                 if is_direct_expn_of(e.span, "cfg").is_some() {
                     None
                 } else {
-                    Some(lit_to_constant(&lit.node, self.typeck_results.expr_ty_opt(e)))
+                    Some(lit_to_mir_constant(&lit.node, self.typeck_results.expr_ty_opt(e)))
                 }
             },
             ExprKind::Array(vec) => self.multi(vec).map(Constant::Vec),

@@ -586,17 +586,10 @@ impl EarlyLintPass for EarlyAttributes {
 
 fn check_empty_line_after_outer_attr(cx: &EarlyContext<'_>, item: &rustc_ast::Item) {
     for attr in &item.attrs {
-        let attr_item = if let AttrKind::Normal(ref attr, _) = attr.kind {
-            attr
-        } else {
-            return;
-        };
-
-        if attr.style == AttrStyle::Outer {
-            if attr_item.args.inner_tokens().is_empty() || !is_present_in_source(cx, attr.span) {
-                return;
-            }
-
+        if matches!(attr.kind, AttrKind::Normal(..))
+            && attr.style == AttrStyle::Outer
+            && is_present_in_source(cx, attr.span)
+        {
             let begin_of_attr_to_item = Span::new(attr.span.lo(), item.span.lo(), item.span.ctxt(), item.span.parent());
             let end_of_attr_to_item = Span::new(attr.span.hi(), item.span.lo(), item.span.ctxt(), item.span.parent());
 
