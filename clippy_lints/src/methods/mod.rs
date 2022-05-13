@@ -1563,7 +1563,7 @@ declare_clippy_lint! {
     #[clippy::version = "1.39.0"]
     pub MANUAL_SATURATING_ARITHMETIC,
     style,
-    "`.chcked_add/sub(x).unwrap_or(MAX/MIN)`"
+    "`.checked_add/sub(x).unwrap_or(MAX/MIN)`"
 }
 
 declare_clippy_lint! {
@@ -1776,8 +1776,6 @@ declare_clippy_lint! {
     ///
     /// ### Example
     /// ```rust
-    /// use std::iter::FromIterator;
-    ///
     /// let five_fives = std::iter::repeat(5).take(5);
     ///
     /// let v = Vec::from_iter(five_fives);
