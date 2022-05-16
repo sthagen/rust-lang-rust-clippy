@@ -211,6 +211,7 @@ mod doc;
 mod double_comparison;
 mod double_parens;
 mod drop_forget_ref;
+mod duplicate_mod;
 mod duration_subsec;
 mod else_if_without_else;
 mod empty_drop;
@@ -224,7 +225,6 @@ mod equatable_if_let;
 mod erasing_op;
 mod escape;
 mod eta_reduction;
-mod eval_order_dependence;
 mod excessive_bools;
 mod exhaustive_items;
 mod exit;
@@ -300,6 +300,7 @@ mod missing_const_for_fn;
 mod missing_doc;
 mod missing_enforced_import_rename;
 mod missing_inline;
+mod mixed_read_write_in_expression;
 mod module_style;
 mod modulo_arithmetic;
 mod mut_key;
@@ -679,7 +680,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(arithmetic::Arithmetic::default()));
     store.register_late_pass(|| Box::new(assign_ops::AssignOps));
     store.register_late_pass(|| Box::new(let_if_seq::LetIfSeq));
-    store.register_late_pass(|| Box::new(eval_order_dependence::EvalOrderDependence));
+    store.register_late_pass(|| Box::new(mixed_read_write_in_expression::EvalOrderDependence));
     store.register_late_pass(|| Box::new(missing_doc::MissingDoc::new()));
     store.register_late_pass(|| Box::new(missing_inline::MissingInline));
     store.register_late_pass(move || Box::new(exhaustive_items::ExhaustiveItems));
@@ -902,6 +903,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(move || Box::new(large_include_file::LargeIncludeFile::new(max_include_file_size)));
     store.register_late_pass(|| Box::new(strings::TrimSplitWhitespace));
     store.register_late_pass(|| Box::new(rc_clone_in_vec_init::RcCloneInVecInit));
+    store.register_early_pass(|| Box::new(duplicate_mod::DuplicateMod::default()));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
