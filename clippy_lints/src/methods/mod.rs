@@ -21,6 +21,7 @@ mod filter_next;
 mod flat_map_identity;
 mod flat_map_option;
 mod from_iter_instead_of_collect;
+mod get_last_with_len;
 mod get_unwrap;
 mod implicit_clone;
 mod inefficient_to_string;
@@ -44,6 +45,7 @@ mod map_identity;
 mod map_unwrap_or;
 mod needless_option_as_deref;
 mod needless_option_take;
+mod no_effect_replace;
 mod ok_expect;
 mod option_as_ref_deref;
 mod option_map_or_none;
@@ -1211,6 +1213,38 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
+    /// Checks for using `x.get(x.len() - 1)` instead of
+    /// `x.last()`.
+    ///
+    /// ### Why is this bad?
+    /// Using `x.last()` is easier to read and has the same
+    /// result.
+    ///
+    /// Note that using `x[x.len() - 1]` is semantically different from
+    /// `x.last()`.  Indexing into the array will panic on out-of-bounds
+    /// accesses, while `x.get()` and `x.last()` will return `None`.
+    ///
+    /// There is another lint (get_unwrap) that covers the case of using
+    /// `x.get(index).unwrap()` instead of `x[index]`.
+    ///
+    /// ### Example
+    /// ```rust
+    /// // Bad
+    /// let x = vec![2, 3, 5];
+    /// let last_element = x.get(x.len() - 1);
+    ///
+    /// // Good
+    /// let x = vec![2, 3, 5];
+    /// let last_element = x.last();
+    /// ```
+    #[clippy::version = "1.37.0"]
+    pub GET_LAST_WITH_LEN,
+    complexity,
+    "Using `x.get(x.len() - 1)` when `x.last()` is correct and simpler"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
     /// Checks for use of `.get().unwrap()` (or
     /// `.get_mut().unwrap`) on a standard library type which implements `Index`
     ///
@@ -2195,6 +2229,24 @@ declare_clippy_lint! {
     "using `.as_ref().take()` on a temporary value"
 }
 
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for `replace` statements which have no effect.
+    ///
+    /// ### Why is this bad?
+    /// It's either a mistake or confusing.
+    ///
+    /// ### Example
+    /// ```rust
+    /// "1234".replace("12", "12");
+    /// "1234".replacen("12", "12", 1);
+    /// ```
+    #[clippy::version = "1.62.0"]
+    pub NO_EFFECT_REPLACE,
+    suspicious,
+    "replace with no effect"
+}
+
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Option<RustcVersion>,
@@ -2264,6 +2316,7 @@ impl_lint_pass!(Methods => [
     BYTES_NTH,
     ITER_SKIP_NEXT,
     GET_UNWRAP,
+    GET_LAST_WITH_LEN,
     STRING_EXTEND_CHARS,
     ITER_CLONED_COLLECT,
     ITER_WITH_DRAIN,
@@ -2294,6 +2347,7 @@ impl_lint_pass!(Methods => [
     NEEDLESS_OPTION_AS_DEREF,
     IS_DIGIT_ASCII_RADIX,
     NEEDLESS_OPTION_TAKE,
+    NO_EFFECT_REPLACE,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -2590,6 +2644,7 @@ impl Methods {
                         inspect_for_each::check(cx, expr, span2);
                     }
                 },
+                ("get", [arg]) => get_last_with_len::check(cx, expr, recv, arg),
                 ("get_or_insert_with", [arg]) => unnecessary_lazy_eval::check(cx, expr, recv, arg, "get_or_insert"),
                 ("is_file", []) => filetype_is_file::check(cx, expr, recv),
                 ("is_digit", [radix]) => is_digit_ascii_radix::check(cx, expr, recv, radix, self.msrv),
@@ -2704,6 +2759,9 @@ impl Methods {
                         unwrap_or_else_default::check(cx, expr, recv, u_arg);
                         unnecessary_lazy_eval::check(cx, expr, recv, u_arg, "unwrap_or");
                     },
+                },
+                ("replace" | "replacen", [arg1, arg2] | [arg1, arg2, _]) => {
+                    no_effect_replace::check(cx, expr, arg1, arg2);
                 },
                 _ => {},
             }
