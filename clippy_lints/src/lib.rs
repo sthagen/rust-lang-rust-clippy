@@ -168,6 +168,7 @@ mod renamed_lints;
 
 // begin lints modules, do not remove this comment, it’s used in `update_lints`
 mod absurd_extreme_comparisons;
+mod almost_complete_letter_range;
 mod approx_const;
 mod arithmetic;
 mod as_conversions;
@@ -379,6 +380,7 @@ mod strlen_on_c_strings;
 mod suspicious_operation_groupings;
 mod suspicious_trait_impl;
 mod swap;
+mod swap_ptr_to_ref;
 mod tabs_in_doc_comments;
 mod temporary_assignment;
 mod to_digit_is_some;
@@ -911,6 +913,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_early_pass(|| Box::new(duplicate_mod::DuplicateMod::default()));
     store.register_late_pass(|| Box::new(get_first::GetFirst));
     store.register_early_pass(|| Box::new(unused_rounding::UnusedRounding));
+    store.register_early_pass(move || Box::new(almost_complete_letter_range::AlmostCompleteLetterRange::new(msrv)));
+    store.register_late_pass(|| Box::new(swap_ptr_to_ref::SwapPtrToRef));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

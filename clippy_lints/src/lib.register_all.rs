@@ -4,6 +4,7 @@
 
 store.register_group(true, "clippy::all", Some("clippy_all"), vec![
     LintId::of(absurd_extreme_comparisons::ABSURD_EXTREME_COMPARISONS),
+    LintId::of(almost_complete_letter_range::ALMOST_COMPLETE_LETTER_RANGE),
     LintId::of(approx_const::APPROX_CONSTANT),
     LintId::of(assertions_on_constants::ASSERTIONS_ON_CONSTANTS),
     LintId::of(assign_ops::ASSIGN_OP_PATTERN),
@@ -291,6 +292,7 @@ store.register_group(true, "clippy::all", Some("clippy_all"), vec![
     LintId::of(suspicious_trait_impl::SUSPICIOUS_OP_ASSIGN_IMPL),
     LintId::of(swap::ALMOST_SWAPPED),
     LintId::of(swap::MANUAL_SWAP),
+    LintId::of(swap_ptr_to_ref::SWAP_PTR_TO_REF),
     LintId::of(tabs_in_doc_comments::TABS_IN_DOC_COMMENTS),
     LintId::of(temporary_assignment::TEMPORARY_ASSIGNMENT),
     LintId::of(to_digit_is_some::TO_DIGIT_IS_SOME),
@@ -304,6 +306,7 @@ store.register_group(true, "clippy::all", Some("clippy_all"), vec![
     LintId::of(transmute::TRANSMUTE_NUM_TO_BYTES),
     LintId::of(transmute::TRANSMUTE_PTR_TO_REF),
     LintId::of(transmute::UNSOUND_COLLECTION_TRANSMUTE),
+    LintId::of(transmute::USELESS_TRANSMUTE),
     LintId::of(transmute::WRONG_TRANSMUTE),
     LintId::of(transmuting_null::TRANSMUTING_NULL),
     LintId::of(types::BORROWED_BOX),

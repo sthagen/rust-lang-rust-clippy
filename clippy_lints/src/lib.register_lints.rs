@@ -34,6 +34,7 @@ store.register_lints(&[
     #[cfg(feature = "internal")]
     utils::internal_lints::UNNECESSARY_SYMBOL_STR,
     absurd_extreme_comparisons::ABSURD_EXTREME_COMPARISONS,
+    almost_complete_letter_range::ALMOST_COMPLETE_LETTER_RANGE,
     approx_const::APPROX_CONSTANT,
     arithmetic::FLOAT_ARITHMETIC,
     arithmetic::INTEGER_ARITHMETIC,
@@ -496,6 +497,7 @@ store.register_lints(&[
     suspicious_trait_impl::SUSPICIOUS_OP_ASSIGN_IMPL,
     swap::ALMOST_SWAPPED,
     swap::MANUAL_SWAP,
+    swap_ptr_to_ref::SWAP_PTR_TO_REF,
     tabs_in_doc_comments::TABS_IN_DOC_COMMENTS,
     temporary_assignment::TEMPORARY_ASSIGNMENT,
     to_digit_is_some::TO_DIGIT_IS_SOME,
