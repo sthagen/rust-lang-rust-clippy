@@ -3280,6 +3280,7 @@ Released 2018-09-13
 [`almost_swapped`]: https://rust-lang.github.io/rust-clippy/master/index.html#almost_swapped
 [`approx_constant`]: https://rust-lang.github.io/rust-clippy/master/index.html#approx_constant
 [`as_conversions`]: https://rust-lang.github.io/rust-clippy/master/index.html#as_conversions
+[`as_underscore`]: https://rust-lang.github.io/rust-clippy/master/index.html#as_underscore
 [`assertions_on_constants`]: https://rust-lang.github.io/rust-clippy/master/index.html#assertions_on_constants
 [`assign_op_pattern`]: https://rust-lang.github.io/rust-clippy/master/index.html#assign_op_pattern
 [`assign_ops`]: https://rust-lang.github.io/rust-clippy/master/index.html#assign_ops
@@ -3297,6 +3298,7 @@ Released 2018-09-13
 [`bool_assert_comparison`]: https://rust-lang.github.io/rust-clippy/master/index.html#bool_assert_comparison
 [`bool_comparison`]: https://rust-lang.github.io/rust-clippy/master/index.html#bool_comparison
 [`borrow_as_ptr`]: https://rust-lang.github.io/rust-clippy/master/index.html#borrow_as_ptr
+[`borrow_deref_ref`]: https://rust-lang.github.io/rust-clippy/master/index.html#borrow_deref_ref
 [`borrow_interior_mutable_const`]: https://rust-lang.github.io/rust-clippy/master/index.html#borrow_interior_mutable_const
 [`borrowed_box`]: https://rust-lang.github.io/rust-clippy/master/index.html#borrowed_box
 [`box_collection`]: https://rust-lang.github.io/rust-clippy/master/index.html#box_collection
@@ -3559,6 +3561,7 @@ Released 2018-09-13
 [`min_max`]: https://rust-lang.github.io/rust-clippy/master/index.html#min_max
 [`misaligned_transmute`]: https://rust-lang.github.io/rust-clippy/master/index.html#misaligned_transmute
 [`mismatched_target_os`]: https://rust-lang.github.io/rust-clippy/master/index.html#mismatched_target_os
+[`mismatching_type_param_order`]: https://rust-lang.github.io/rust-clippy/master/index.html#mismatching_type_param_order
 [`misrefactored_assign_op`]: https://rust-lang.github.io/rust-clippy/master/index.html#misrefactored_assign_op
 [`missing_const_for_fn`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn
 [`missing_docs_in_private_items`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_docs_in_private_items
