@@ -159,7 +159,7 @@ macro_rules! declare_clippy_lint {
 }
 
 #[cfg(feature = "internal")]
-mod deprecated_lints;
+pub mod deprecated_lints;
 #[cfg_attr(feature = "internal", allow(clippy::missing_clippy_version_attribute))]
 mod utils;
 
@@ -283,6 +283,7 @@ mod manual_bits;
 mod manual_non_exhaustive;
 mod manual_ok_or;
 mod manual_rem_euclid;
+mod manual_retain;
 mod manual_strip;
 mod map_clone;
 mod map_err_ignore;
@@ -641,7 +642,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(borrow_deref_ref::BorrowDerefRef));
     store.register_late_pass(|| Box::new(no_effect::NoEffect));
     store.register_late_pass(|| Box::new(temporary_assignment::TemporaryAssignment));
-    store.register_late_pass(|| Box::new(transmute::Transmute));
+    store.register_late_pass(move || Box::new(transmute::Transmute::new(msrv)));
     let cognitive_complexity_threshold = conf.cognitive_complexity_threshold;
     store.register_late_pass(move || {
         Box::new(cognitive_complexity::CognitiveComplexity::new(
@@ -914,6 +915,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(read_zero_byte_vec::ReadZeroByteVec));
     store.register_late_pass(|| Box::new(default_instead_of_iter_empty::DefaultIterEmpty));
     store.register_late_pass(move || Box::new(manual_rem_euclid::ManualRemEuclid::new(msrv)));
+    store.register_late_pass(move || Box::new(manual_retain::ManualRetain::new(msrv)));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

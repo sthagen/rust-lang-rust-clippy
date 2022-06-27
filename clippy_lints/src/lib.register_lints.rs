@@ -10,6 +10,8 @@ store.register_lints(&[
     #[cfg(feature = "internal")]
     utils::internal_lints::COMPILER_LINT_FUNCTIONS,
     #[cfg(feature = "internal")]
+    utils::internal_lints::DEFAULT_DEPRECATION_REASON,
+    #[cfg(feature = "internal")]
     utils::internal_lints::DEFAULT_LINT,
     #[cfg(feature = "internal")]
     utils::internal_lints::IF_CHAIN_STYLE,
@@ -235,6 +237,7 @@ store.register_lints(&[
     loops::FOR_KV_MAP,
     loops::FOR_LOOPS_OVER_FALLIBLES,
     loops::ITER_NEXT_LOOP,
+    loops::MANUAL_FIND,
     loops::MANUAL_FLATTEN,
     loops::MANUAL_MEMCPY,
     loops::MISSING_SPIN_LOOP,
@@ -255,6 +258,7 @@ store.register_lints(&[
     manual_non_exhaustive::MANUAL_NON_EXHAUSTIVE,
     manual_ok_or::MANUAL_OK_OR,
     manual_rem_euclid::MANUAL_REM_EUCLID,
+    manual_retain::MANUAL_RETAIN,
     manual_strip::MANUAL_STRIP,
     map_clone::MAP_CLONE,
     map_err_ignore::MAP_ERR_IGNORE,
