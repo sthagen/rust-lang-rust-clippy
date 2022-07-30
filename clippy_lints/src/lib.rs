@@ -4,7 +4,6 @@
 #![feature(control_flow_enum)]
 #![feature(drain_filter)]
 #![feature(iter_intersperse)]
-#![feature(let_chains)]
 #![feature(let_else)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
@@ -178,7 +177,6 @@ mod assertions_on_result_states;
 mod async_yields_async;
 mod attrs;
 mod await_holding_invalid;
-mod blacklisted_name;
 mod blocks_in_if_conditions;
 mod bool_assert_comparison;
 mod booleans;
@@ -206,6 +204,7 @@ mod dereference;
 mod derivable_impls;
 mod derive;
 mod disallowed_methods;
+mod disallowed_names;
 mod disallowed_script_idents;
 mod disallowed_types;
 mod doc;
@@ -487,7 +486,7 @@ pub fn read_conf(sess: &Session) -> Conf {
         },
     };
 
-    let TryConf { conf, errors } = utils::conf::read(&file_name);
+    let TryConf { conf, errors, warnings } = utils::conf::read(&file_name);
     // all conf errors are non-fatal, we just use the default conf in case of error
     for error in errors {
         sess.err(&format!(
@@ -495,6 +494,15 @@ pub fn read_conf(sess: &Session) -> Conf {
             file_name.display(),
             format_error(error)
         ));
+    }
+
+    for warning in warnings {
+        sess.struct_warn(&format!(
+            "error reading Clippy's configuration file `{}`: {}",
+            file_name.display(),
+            format_error(warning)
+        ))
+        .emit();
     }
 
     conf
@@ -675,8 +683,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(swap::Swap));
     store.register_late_pass(|| Box::new(overflow_check_conditional::OverflowCheckConditional));
     store.register_late_pass(|| Box::new(new_without_default::NewWithoutDefault::default()));
-    let blacklisted_names = conf.blacklisted_names.iter().cloned().collect::<FxHashSet<_>>();
-    store.register_late_pass(move || Box::new(blacklisted_name::BlacklistedName::new(blacklisted_names.clone())));
+    let disallowed_names = conf.disallowed_names.iter().cloned().collect::<FxHashSet<_>>();
+    store.register_late_pass(move || Box::new(disallowed_names::DisallowedNames::new(disallowed_names.clone())));
     let too_many_arguments_threshold = conf.too_many_arguments_threshold;
     let too_many_lines_threshold = conf.too_many_lines_threshold;
     store.register_late_pass(move || {
