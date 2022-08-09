@@ -3818,11 +3818,13 @@ Released 2018-09-13
 [`or_then_unwrap`]: https://rust-lang.github.io/rust-clippy/master/index.html#or_then_unwrap
 [`out_of_bounds_indexing`]: https://rust-lang.github.io/rust-clippy/master/index.html#out_of_bounds_indexing
 [`overflow_check_conditional`]: https://rust-lang.github.io/rust-clippy/master/index.html#overflow_check_conditional
+[`overly_complex_bool_expr`]: https://rust-lang.github.io/rust-clippy/master/index.html#overly_complex_bool_expr
 [`panic`]: https://rust-lang.github.io/rust-clippy/master/index.html#panic
 [`panic_in_result_fn`]: https://rust-lang.github.io/rust-clippy/master/index.html#panic_in_result_fn
 [`panic_params`]: https://rust-lang.github.io/rust-clippy/master/index.html#panic_params
 [`panicking_unwrap`]: https://rust-lang.github.io/rust-clippy/master/index.html#panicking_unwrap
 [`partialeq_ne_impl`]: https://rust-lang.github.io/rust-clippy/master/index.html#partialeq_ne_impl
+[`partialeq_to_none`]: https://rust-lang.github.io/rust-clippy/master/index.html#partialeq_to_none
 [`path_buf_push_overwrite`]: https://rust-lang.github.io/rust-clippy/master/index.html#path_buf_push_overwrite
 [`pattern_type_mismatch`]: https://rust-lang.github.io/rust-clippy/master/index.html#pattern_type_mismatch
 [`possible_missing_comma`]: https://rust-lang.github.io/rust-clippy/master/index.html#possible_missing_comma
