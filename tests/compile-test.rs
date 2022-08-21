@@ -394,7 +394,6 @@ const RUSTFIX_COVERAGE_KNOWN_EXCEPTIONS: &[&str] = &[
     "single_component_path_imports_nested_first.rs",
     "string_add.rs",
     "toplevel_ref_arg_non_rustfix.rs",
-    "trait_duplication_in_bounds.rs",
     "unit_arg.rs",
     "unnecessary_clone.rs",
     "unnecessary_lazy_eval_unfixable.rs",
@@ -404,7 +403,12 @@ const RUSTFIX_COVERAGE_KNOWN_EXCEPTIONS: &[&str] = &[
 ];
 
 fn check_rustfix_coverage() {
-    let missing_coverage_path = Path::new("target/debug/test/ui/rustfix_missing_coverage.txt");
+    let missing_coverage_path = Path::new("debug/test/ui/rustfix_missing_coverage.txt");
+    let missing_coverage_path = if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(target_dir).join(missing_coverage_path)
+    } else {
+        missing_coverage_path.to_path_buf()
+    };
 
     if let Ok(missing_coverage_contents) = std::fs::read_to_string(missing_coverage_path) {
         assert!(RUSTFIX_COVERAGE_KNOWN_EXCEPTIONS.iter().is_sorted_by_key(Path::new));

@@ -3642,6 +3642,7 @@ Released 2018-09-13
 [`collapsible_else_if`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_else_if
 [`collapsible_if`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
 [`collapsible_match`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_match
+[`collapsible_str_replace`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_str_replace
 [`comparison_chain`]: https://rust-lang.github.io/rust-clippy/master/index.html#comparison_chain
 [`comparison_to_empty`]: https://rust-lang.github.io/rust-clippy/master/index.html#comparison_to_empty
 [`const_static_lifetime`]: https://rust-lang.github.io/rust-clippy/master/index.html#const_static_lifetime
@@ -3802,6 +3803,8 @@ Released 2018-09-13
 [`iter_not_returning_iterator`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_not_returning_iterator
 [`iter_nth`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_nth
 [`iter_nth_zero`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_nth_zero
+[`iter_on_empty_collections`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_on_empty_collections
+[`iter_on_single_items`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_on_single_items
 [`iter_overeager_cloned`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_overeager_cloned
 [`iter_skip_next`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_skip_next
 [`iter_with_drain`]: https://rust-lang.github.io/rust-clippy/master/index.html#iter_with_drain
@@ -3828,6 +3831,7 @@ Released 2018-09-13
 [`manual_assert`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_assert
 [`manual_async_fn`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_async_fn
 [`manual_bits`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_bits
+[`manual_empty_string_creations`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_empty_string_creations
 [`manual_filter_map`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_filter_map
 [`manual_find`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_find
 [`manual_find_map`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_find_map
@@ -3973,6 +3977,7 @@ Released 2018-09-13
 [`partialeq_to_none`]: https://rust-lang.github.io/rust-clippy/master/index.html#partialeq_to_none
 [`path_buf_push_overwrite`]: https://rust-lang.github.io/rust-clippy/master/index.html#path_buf_push_overwrite
 [`pattern_type_mismatch`]: https://rust-lang.github.io/rust-clippy/master/index.html#pattern_type_mismatch
+[`positional_named_format_parameters`]: https://rust-lang.github.io/rust-clippy/master/index.html#positional_named_format_parameters
 [`possible_missing_comma`]: https://rust-lang.github.io/rust-clippy/master/index.html#possible_missing_comma
 [`precedence`]: https://rust-lang.github.io/rust-clippy/master/index.html#precedence
 [`print_in_format_impl`]: https://rust-lang.github.io/rust-clippy/master/index.html#print_in_format_impl
@@ -4148,6 +4153,7 @@ Released 2018-09-13
 [`unused_collect`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_collect
 [`unused_io_amount`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_io_amount
 [`unused_label`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_label
+[`unused_peekable`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_peekable
 [`unused_rounding`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_rounding
 [`unused_self`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_self
 [`unused_unit`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_unit
