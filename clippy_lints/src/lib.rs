@@ -267,11 +267,11 @@ mod main_recursion;
 mod manual_assert;
 mod manual_async_fn;
 mod manual_bits;
-mod manual_empty_string_creations;
 mod manual_instant_elapsed;
 mod manual_non_exhaustive;
 mod manual_rem_euclid;
 mod manual_retain;
+mod manual_string_new;
 mod manual_strip;
 mod map_unit_fn;
 mod match_result_ok;
@@ -289,6 +289,7 @@ mod missing_enforced_import_rename;
 mod missing_inline;
 mod mixed_read_write_in_expression;
 mod module_style;
+mod multi_assignments;
 mod mut_key;
 mod mut_mut;
 mod mut_reference;
@@ -894,8 +895,9 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(std_instead_of_core::StdReexports::default()));
     store.register_late_pass(|| Box::new(manual_instant_elapsed::ManualInstantElapsed));
     store.register_late_pass(|| Box::new(partialeq_to_none::PartialeqToNone));
-    store.register_late_pass(|| Box::new(manual_empty_string_creations::ManualEmptyStringCreations));
+    store.register_late_pass(|| Box::new(manual_string_new::ManualStringNew));
     store.register_late_pass(|| Box::new(unused_peekable::UnusedPeekable));
+    store.register_early_pass(|| Box::new(multi_assignments::MultiAssignments));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
