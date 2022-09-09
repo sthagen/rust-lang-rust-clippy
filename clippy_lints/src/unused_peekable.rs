@@ -149,7 +149,8 @@ impl<'tcx> Visitor<'_> for PeekableVisitor<'_, 'tcx> {
                                     ident: method_name_ident,
                                     ..
                                 },
-                                [self_arg, remaining_args @ ..],
+                                self_arg,
+                                remaining_args,
                                 _,
                             ) => {
                                 let method_name = method_name_ident.name.as_str();
@@ -201,7 +202,7 @@ impl<'tcx> Visitor<'_> for PeekableVisitor<'_, 'tcx> {
                             return;
                         },
                     },
-                    Node::Block(_) => {},
+                    Node::Block(_) | Node::ExprField(_) => {},
                     _ => {
                         break;
                     },

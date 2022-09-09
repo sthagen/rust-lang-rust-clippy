@@ -4,6 +4,7 @@
 #![feature(control_flow_enum)]
 #![feature(drain_filter)]
 #![feature(iter_intersperse)]
+#![feature(let_chains)]
 #![feature(let_else)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
@@ -178,6 +179,7 @@ mod attrs;
 mod await_holding_invalid;
 mod blocks_in_if_conditions;
 mod bool_assert_comparison;
+mod bool_to_int_with_if;
 mod booleans;
 mod borrow_deref_ref;
 mod cargo;
@@ -543,8 +545,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         store.register_late_pass(|| Box::new(utils::internal_lints::MsrvAttrImpl));
     }
 
-    let arithmetic_allowed = conf.arithmetic_allowed.clone();
-    store.register_late_pass(move || Box::new(operators::arithmetic::Arithmetic::new(arithmetic_allowed.clone())));
+    let arithmetic_side_effects_allowed = conf.arithmetic_side_effects_allowed.clone();
+    store.register_late_pass(move || {
+        Box::new(operators::arithmetic_side_effects::ArithmeticSideEffects::new(
+            arithmetic_side_effects_allowed.clone(),
+        ))
+    });
     store.register_late_pass(|| Box::new(utils::dump_hir::DumpHir));
     store.register_late_pass(|| Box::new(utils::author::Author));
     let await_holding_invalid_types = conf.await_holding_invalid_types.clone();
@@ -668,10 +674,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(move || Box::new(disallowed_names::DisallowedNames::new(disallowed_names.clone())));
     let too_many_arguments_threshold = conf.too_many_arguments_threshold;
     let too_many_lines_threshold = conf.too_many_lines_threshold;
+    let large_error_threshold = conf.large_error_threshold;
     store.register_late_pass(move || {
         Box::new(functions::Functions::new(
             too_many_arguments_threshold,
             too_many_lines_threshold,
+            large_error_threshold,
         ))
     });
     let doc_valid_idents = conf.doc_valid_idents.iter().cloned().collect::<FxHashSet<_>>();
@@ -898,6 +906,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|| Box::new(manual_string_new::ManualStringNew));
     store.register_late_pass(|| Box::new(unused_peekable::UnusedPeekable));
     store.register_early_pass(|| Box::new(multi_assignments::MultiAssignments));
+    store.register_late_pass(|| Box::new(bool_to_int_with_if::BoolToIntWithIf));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

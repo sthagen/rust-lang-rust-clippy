@@ -526,7 +526,7 @@ impl SimpleFormatArgs {
         str_lit_span: Span,
         fmt_span: Span,
     ) {
-        use rustc_parse_format::{ArgumentImplicitlyIs, ArgumentIs, CountIsParam};
+        use rustc_parse_format::{ArgumentImplicitlyIs, ArgumentIs, CountIsParam, CountIsStar};
 
         let snippet = snippet_opt(cx, fmt_span);
 
@@ -540,7 +540,7 @@ impl SimpleFormatArgs {
             self.push_to_complex(span, n);
         };
 
-        if let (CountIsParam(n), Some(span)) = (arg.format.precision, arg.format.precision_span) {
+        if let (CountIsParam(n) | CountIsStar(n), Some(span)) = (arg.format.precision, arg.format.precision_span) {
             // We need to do this hack as precision spans should be converted from .* to .foo$
             let hack = if snippet.as_ref().and_then(|s| s.find('*')).is_some() {
                 0
@@ -683,12 +683,12 @@ impl Write {
                 },
             };
 
-            let replacement: String = match lit.token.kind {
+            let replacement: String = match lit.token_lit.kind {
                 LitKind::StrRaw(_) | LitKind::ByteStrRaw(_) if matches!(fmtstr.style, StrStyle::Raw(_)) => {
-                    lit.token.symbol.as_str().replace('{', "{{").replace('}', "}}")
+                    lit.token_lit.symbol.as_str().replace('{', "{{").replace('}', "}}")
                 },
                 LitKind::Str | LitKind::ByteStr if matches!(fmtstr.style, StrStyle::Cooked) => {
-                    lit.token.symbol.as_str().replace('{', "{{").replace('}', "}}")
+                    lit.token_lit.symbol.as_str().replace('{', "{{").replace('}', "}}")
                 },
                 LitKind::StrRaw(_)
                 | LitKind::Str
@@ -697,7 +697,7 @@ impl Write {
                 | LitKind::Integer
                 | LitKind::Float
                 | LitKind::Err => continue,
-                LitKind::Byte | LitKind::Char => match lit.token.symbol.as_str() {
+                LitKind::Byte | LitKind::Char => match lit.token_lit.symbol.as_str() {
                     "\"" if matches!(fmtstr.style, StrStyle::Cooked) => "\\\"",
                     "\"" if matches!(fmtstr.style, StrStyle::Raw(0)) => continue,
                     "\\\\" if matches!(fmtstr.style, StrStyle::Raw(_)) => "\\",
@@ -708,7 +708,7 @@ impl Write {
                     x => x,
                 }
                 .into(),
-                LitKind::Bool => lit.token.symbol.as_str().deref().into(),
+                LitKind::Bool => lit.token_lit.symbol.as_str().deref().into(),
             };
 
             if !fmt_spans.is_empty() {
@@ -805,7 +805,11 @@ fn check_newlines(fmtstr: &StrLit) -> bool {
     let contents = fmtstr.symbol.as_str();
 
     let mut cb = |r: Range<usize>, c: Result<char, EscapeError>| {
-        let c = c.unwrap();
+        let c = match c {
+            Ok(c) => c,
+            Err(e) if !e.is_fatal() => return,
+            Err(e) => panic!("{:?}", e),
+        };
 
         if r.end == contents.len() && c == '\n' && !last_was_cr && !has_internal_newline {
             should_lint = true;
