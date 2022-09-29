@@ -93,7 +93,7 @@ fn check_ident(cx: &LateContext<'_>, ident: &Ident, be_aggressive: bool) {
             cx,
             UPPER_CASE_ACRONYMS,
             span,
-            &format!("name `{}` contains a capitalized acronym", ident),
+            &format!("name `{ident}` contains a capitalized acronym"),
             "consider making the acronym lowercase, except the initial letter",
             corrected,
             Applicability::MaybeIncorrect,
@@ -105,7 +105,7 @@ impl LateLintPass<'_> for UpperCaseAcronyms {
     fn check_item(&mut self, cx: &LateContext<'_>, it: &Item<'_>) {
         // do not lint public items or in macros
         if in_external_macro(cx.sess(), it.span)
-            || (self.avoid_breaking_exported_api && cx.access_levels.is_exported(it.def_id))
+            || (self.avoid_breaking_exported_api && cx.access_levels.is_exported(it.def_id.def_id))
         {
             return;
         }

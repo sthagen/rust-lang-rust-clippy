@@ -1,7 +1,6 @@
 // run-rustfix
 
 #![feature(lint_reasons)]
-#![feature(let_else)]
 #![allow(unused)]
 #![allow(
     clippy::if_same_then_else,
@@ -231,6 +230,43 @@ fn needless_return_macro() -> String {
 fn issue_9361() -> i32 {
     #[allow(clippy::integer_arithmetic)]
     return 1 + 2;
+}
+
+fn issue8336(x: i32) -> bool {
+    if x > 0 {
+        println!("something");
+        return true;
+    } else {
+        return false;
+    };
+}
+
+fn issue8156(x: u8) -> u64 {
+    match x {
+        80 => {
+            return 10;
+        },
+        _ => {
+            return 100;
+        },
+    };
+}
+
+// Ideally the compiler should throw `unused_braces` in this case
+fn issue9192() -> i32 {
+    {
+        return 0;
+    };
+}
+
+fn issue9503(x: usize) -> isize {
+    unsafe {
+        if x > 12 {
+            return *(x as *const isize);
+        } else {
+            return !*(x as *const isize);
+        };
+    };
 }
 
 fn main() {}

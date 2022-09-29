@@ -3,8 +3,8 @@ use clippy_utils::higher;
 use clippy_utils::source::snippet_with_applicability;
 use clippy_utils::ty::is_type_diagnostic_item;
 use clippy_utils::{
-    eq_expr_value, get_parent_node, is_else_clause, is_lang_ctor, path_to_local, path_to_local_id, peel_blocks,
-    peel_blocks_with_stmt,
+    eq_expr_value, get_parent_node, in_constant, is_else_clause, is_lang_ctor, path_to_local, path_to_local_id,
+    peel_blocks, peel_blocks_with_stmt,
 };
 use if_chain::if_chain;
 use rustc_errors::Applicability;
@@ -97,12 +97,12 @@ fn check_is_none_or_err_and_early_return<'tcx>(cx: &LateContext<'tcx>, expr: &Ex
                 !matches!(caller.kind, ExprKind::Call(..) | ExprKind::MethodCall(..));
             let sugg = if let Some(else_inner) = r#else {
                 if eq_expr_value(cx, caller, peel_blocks(else_inner)) {
-                    format!("Some({}?)", receiver_str)
+                    format!("Some({receiver_str}?)")
                 } else {
                     return;
                 }
             } else {
-                format!("{}{}?;", receiver_str, if by_ref { ".as_ref()" } else { "" })
+                format!("{receiver_str}{}?;", if by_ref { ".as_ref()" } else { "" })
             };
 
             span_lint_and_sugg(
@@ -122,7 +122,8 @@ fn check_if_let_some_or_err_and_early_return<'tcx>(cx: &LateContext<'tcx>, expr:
     if_chain! {
         if let Some(higher::IfLet { let_pat, let_expr, if_then, if_else }) = higher::IfLet::hir(cx, expr);
         if !is_else_clause(cx.tcx, expr);
-        if let PatKind::TupleStruct(ref path1, [field], None) = let_pat.kind;
+        if let PatKind::TupleStruct(ref path1, [field], ddpos) = let_pat.kind;
+        if ddpos.as_opt_usize().is_none();
         if let PatKind::Binding(BindingAnnotation(by_ref, _), bind_id, ident, None) = field.kind;
         let caller_ty = cx.typeck_results().expr_ty(let_expr);
         let if_block = IfBlockType::IfLet(path1, caller_ty, ident.name, let_expr, if_then, if_else);
@@ -134,8 +135,7 @@ fn check_if_let_some_or_err_and_early_return<'tcx>(cx: &LateContext<'tcx>, expr:
             let receiver_str = snippet_with_applicability(cx, let_expr.span, "..", &mut applicability);
             let requires_semi = matches!(get_parent_node(cx.tcx, expr.hir_id), Some(Node::Stmt(_)));
             let sugg = format!(
-                "{}{}?{}",
-                receiver_str,
+                "{receiver_str}{}?{}",
                 if by_ref == ByRef::Yes { ".as_ref()" } else { "" },
                 if requires_semi { ";" } else { "" }
             );
@@ -223,7 +223,9 @@ fn expr_return_none_or_err(
 
 impl<'tcx> LateLintPass<'tcx> for QuestionMark {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
-        check_is_none_or_err_and_early_return(cx, expr);
-        check_if_let_some_or_err_and_early_return(cx, expr);
+        if !in_constant(cx, expr.hir_id) {
+            check_is_none_or_err_and_early_return(cx, expr);
+            check_if_let_some_or_err_and_early_return(cx, expr);
+        }
     }
 }

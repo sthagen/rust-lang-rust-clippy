@@ -99,23 +99,21 @@ fn report_single_pattern(
 
             let msg = "you seem to be trying to use `match` for an equality check. Consider using `if`";
             let sugg = format!(
-                "if {} == {}{} {}{}",
+                "if {} == {}{} {}{els_str}",
                 snippet(cx, ex.span, ".."),
                 // PartialEq for different reference counts may not exist.
                 "&".repeat(ref_count_diff),
                 snippet(cx, arms[0].pat.span, ".."),
                 expr_block(cx, arms[0].body, None, "..", Some(expr.span)),
-                els_str,
             );
             (msg, sugg)
         } else {
             let msg = "you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`";
             let sugg = format!(
-                "if let {} = {} {}{}",
+                "if let {} = {} {}{els_str}",
                 snippet(cx, arms[0].pat.span, ".."),
                 snippet(cx, ex.span, ".."),
                 expr_block(cx, arms[0].body, None, "..", Some(expr.span)),
-                els_str,
             );
             (msg, sugg)
         }
@@ -200,6 +198,8 @@ fn form_exhaustive_matches<'a>(cx: &LateContext<'a>, ty: Ty<'a>, left: &Pat<'_>,
             // We don't actually know the position and the presence of the `..` (dotdot) operator
             // in the arms, so we need to evaluate the correct offsets here in order to iterate in
             // both arms at the same time.
+            let left_pos = left_pos.as_opt_usize();
+            let right_pos = right_pos.as_opt_usize();
             let len = max(
                 left_in.len() + usize::from(left_pos.is_some()),
                 right_in.len() + usize::from(right_pos.is_some()),
