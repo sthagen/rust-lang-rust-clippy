@@ -24,8 +24,6 @@ store.register_lints(&[
     #[cfg(feature = "internal")]
     utils::internal_lints::LINT_WITHOUT_LINT_PASS,
     #[cfg(feature = "internal")]
-    utils::internal_lints::MATCH_TYPE_ON_DIAGNOSTIC_ITEM,
-    #[cfg(feature = "internal")]
     utils::internal_lints::MISSING_CLIPPY_VERSION_ATTRIBUTE,
     #[cfg(feature = "internal")]
     utils::internal_lints::MISSING_MSRV_ATTR_IMPL,
@@ -33,6 +31,8 @@ store.register_lints(&[
     utils::internal_lints::OUTER_EXPN_EXPN_DATA,
     #[cfg(feature = "internal")]
     utils::internal_lints::PRODUCE_ICE,
+    #[cfg(feature = "internal")]
+    utils::internal_lints::UNNECESSARY_DEF_PATH,
     #[cfg(feature = "internal")]
     utils::internal_lints::UNNECESSARY_SYMBOL_STR,
     almost_complete_letter_range::ALMOST_COMPLETE_LETTER_RANGE,
@@ -114,6 +114,7 @@ store.register_lints(&[
     derive::DERIVE_PARTIAL_EQ_WITHOUT_EQ,
     derive::EXPL_IMPL_CLONE_ON_COPY,
     derive::UNSAFE_DERIVE_DESERIALIZE,
+    disallowed_macros::DISALLOWED_MACROS,
     disallowed_methods::DISALLOWED_METHODS,
     disallowed_names::DISALLOWED_NAMES,
     disallowed_script_idents::DISALLOWED_SCRIPT_IDENTS,
@@ -184,6 +185,7 @@ store.register_lints(&[
     if_then_some_else_none::IF_THEN_SOME_ELSE_NONE,
     implicit_hasher::IMPLICIT_HASHER,
     implicit_return::IMPLICIT_RETURN,
+    implicit_saturating_add::IMPLICIT_SATURATING_ADD,
     implicit_saturating_sub::IMPLICIT_SATURATING_SUB,
     inconsistent_struct_constructor::INCONSISTENT_STRUCT_CONSTRUCTOR,
     index_refutable_slice::INDEX_REFUTABLE_SLICE,
