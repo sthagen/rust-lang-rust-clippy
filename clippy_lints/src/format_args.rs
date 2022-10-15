@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::{span_lint_and_sugg, span_lint_and_then};
 use clippy_utils::macros::FormatParamKind::{Implicit, Named, Numbered, Starred};
-use clippy_utils::macros::{is_format_macro, FormatArgsExpn, FormatParam, FormatParamUsage};
+use clippy_utils::macros::{is_format_macro, is_panic, FormatArgsExpn, FormatParam, FormatParamUsage};
 use clippy_utils::source::snippet_opt;
 use clippy_utils::ty::implements_trait;
 use clippy_utils::{is_diag_trait_item, meets_msrv, msrvs};
@@ -13,6 +13,8 @@ use rustc_middle::ty::adjustment::{Adjust, Adjustment};
 use rustc_middle::ty::Ty;
 use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
+use rustc_span::def_id::DefId;
+use rustc_span::edition::Edition::Edition2021;
 use rustc_span::{sym, ExpnData, ExpnKind, Span, Symbol};
 
 declare_clippy_lint! {
@@ -111,7 +113,7 @@ declare_clippy_lint! {
     /// nothing will be suggested, e.g. `println!("{0}={1}", var, 1+2)`.
     #[clippy::version = "1.65.0"]
     pub UNINLINED_FORMAT_ARGS,
-    pedantic,
+    style,
     "using non-inlined variables in `format!` calls"
 }
 
@@ -149,7 +151,7 @@ impl<'tcx> LateLintPass<'tcx> for FormatArgs {
                     check_to_string_in_format_args(cx, name, arg.param.value);
                 }
                 if meets_msrv(self.msrv, msrvs::FORMAT_ARGS_CAPTURE) {
-                    check_uninlined_args(cx, &format_args, outermost_expn_data.call_site);
+                    check_uninlined_args(cx, &format_args, outermost_expn_data.call_site, macro_def_id);
                 }
             }
         }
@@ -158,8 +160,12 @@ impl<'tcx> LateLintPass<'tcx> for FormatArgs {
     extract_msrv_attr!(LateContext);
 }
 
-fn check_uninlined_args(cx: &LateContext<'_>, args: &FormatArgsExpn<'_>, call_site: Span) {
+fn check_uninlined_args(cx: &LateContext<'_>, args: &FormatArgsExpn<'_>, call_site: Span, def_id: DefId) {
     if args.format_string.span.from_expansion() {
+        return;
+    }
+    if call_site.edition() < Edition2021 && is_panic(cx, def_id) {
+        // panic! before 2021 edition considers a single string argument as non-format
         return;
     }
 
@@ -243,7 +249,7 @@ fn check_format_in_format_args(cx: &LateContext<'_>, call_site: Span, name: Symb
 fn check_to_string_in_format_args(cx: &LateContext<'_>, name: Symbol, value: &Expr<'_>) {
     if_chain! {
         if !value.span.from_expansion();
-        if let ExprKind::MethodCall(_, receiver, [], _) = value.kind;
+        if let ExprKind::MethodCall(_, receiver, [], to_string_span) = value.kind;
         if let Some(method_def_id) = cx.typeck_results().type_dependent_def_id(value.hir_id);
         if is_diag_trait_item(cx, method_def_id, sym::ToString);
         let receiver_ty = cx.typeck_results().expr_ty(receiver);
@@ -259,7 +265,7 @@ fn check_to_string_in_format_args(cx: &LateContext<'_>, name: Symbol, value: &Ex
                 span_lint_and_sugg(
                     cx,
                     TO_STRING_IN_FORMAT_ARGS,
-                    value.span.with_lo(receiver.span.hi()),
+                    to_string_span.with_lo(receiver.span.hi()),
                     &format!(
                         "`to_string` applied to a type that implements `Display` in `{name}!` args"
                     ),
