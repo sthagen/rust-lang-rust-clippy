@@ -1766,6 +1766,7 @@ pub fn any_parent_is_automatically_derived(tcx: TyCtxt<'_>, node: HirId) -> bool
 /// ```rust,ignore
 /// if let Some(args) = match_function_call(cx, cmp_max_call, &paths::CMP_MAX);
 /// ```
+/// This function is deprecated. Use [`match_function_call_with_def_id`].
 pub fn match_function_call<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx Expr<'_>,
@@ -1776,6 +1777,22 @@ pub fn match_function_call<'tcx>(
         if let ExprKind::Path(ref qpath) = fun.kind;
         if let Some(fun_def_id) = cx.qpath_res(qpath, fun.hir_id).opt_def_id();
         if match_def_path(cx, fun_def_id, path);
+        then {
+            return Some(args);
+        }
+    };
+    None
+}
+
+pub fn match_function_call_with_def_id<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &'tcx Expr<'_>,
+    fun_def_id: DefId,
+) -> Option<&'tcx [Expr<'tcx>]> {
+    if_chain! {
+        if let ExprKind::Call(fun, args) = expr.kind;
+        if let ExprKind::Path(ref qpath) = fun.kind;
+        if cx.qpath_res(qpath, fun.hir_id).opt_def_id() == Some(fun_def_id);
         then {
             return Some(args);
         }
@@ -2091,9 +2108,9 @@ pub fn fn_def_id(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<DefId> {
     }
 }
 
-/// Returns Option<String> where String is a textual representation of the type encapsulated in the
-/// slice iff the given expression is a slice of primitives (as defined in the
-/// `is_recursively_primitive_type` function) and None otherwise.
+/// Returns `Option<String>` where String is a textual representation of the type encapsulated in
+/// the slice iff the given expression is a slice of primitives (as defined in the
+/// `is_recursively_primitive_type` function) and `None` otherwise.
 pub fn is_slice_of_primitives(cx: &LateContext<'_>, expr: &Expr<'_>) -> Option<String> {
     let expr_type = cx.typeck_results().expr_ty_adjusted(expr);
     let expr_kind = expr_type.kind();

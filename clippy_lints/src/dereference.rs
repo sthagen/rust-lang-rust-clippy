@@ -856,11 +856,10 @@ fn walk_parents<'tcx>(
                                 // Trait methods taking `self`
                                 arg_ty
                             } && impl_ty.is_ref()
-                            && cx.tcx.infer_ctxt().enter(|infcx|
-                                infcx
-                                    .type_implements_trait(trait_id, impl_ty, subs, cx.param_env)
-                                    .must_apply_modulo_regions()
-                            )
+                            && let infcx = cx.tcx.infer_ctxt().build()
+                            && infcx
+                                .type_implements_trait(trait_id, impl_ty, subs, cx.param_env)
+                                .must_apply_modulo_regions()
                         {
                             return Some(Position::MethodReceiverRefImpl)
                         }
@@ -1158,9 +1157,8 @@ fn needless_borrow_impl_arg_position<'tcx>(
 
             let predicate = EarlyBinder(predicate).subst(cx.tcx, &substs_with_referent_ty);
             let obligation = Obligation::new(ObligationCause::dummy(), cx.param_env, predicate);
-            cx.tcx
-                .infer_ctxt()
-                .enter(|infcx| infcx.predicate_must_hold_modulo_regions(&obligation))
+            let infcx = cx.tcx.infer_ctxt().build();
+            infcx.predicate_must_hold_modulo_regions(&obligation)
         })
     };
 
@@ -1194,16 +1192,16 @@ fn has_ref_mut_self_method(cx: &LateContext<'_>, trait_def_id: DefId) -> bool {
         })
 }
 
-fn referent_used_exactly_once<'a, 'tcx>(
-    cx: &'a LateContext<'tcx>,
+fn referent_used_exactly_once<'tcx>(
+    cx: &LateContext<'tcx>,
     possible_borrowers: &mut Vec<(LocalDefId, PossibleBorrowerMap<'tcx, 'tcx>)>,
     reference: &Expr<'tcx>,
 ) -> bool {
     let mir = enclosing_mir(cx.tcx, reference.hir_id);
     if let Some(local) = expr_local(cx.tcx, reference)
         && let [location] = *local_assignments(mir, local).as_slice()
-        && let StatementKind::Assign(box (_, Rvalue::Ref(_, _, place))) =
-            mir.basic_blocks[location.block].statements[location.statement_index].kind
+        && let Some(statement) = mir.basic_blocks[location.block].statements.get(location.statement_index)
+        && let StatementKind::Assign(box (_, Rvalue::Ref(_, _, place))) = statement.kind
         && !place.has_deref()
     {
         let body_owner_local_def_id = cx.tcx.hir().enclosing_body_owner(reference.hir_id);

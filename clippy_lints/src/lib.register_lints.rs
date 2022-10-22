@@ -4,37 +4,37 @@
 
 store.register_lints(&[
     #[cfg(feature = "internal")]
-    utils::internal_lints::CLIPPY_LINTS_INTERNAL,
+    utils::internal_lints::clippy_lints_internal::CLIPPY_LINTS_INTERNAL,
     #[cfg(feature = "internal")]
-    utils::internal_lints::COLLAPSIBLE_SPAN_LINT_CALLS,
+    utils::internal_lints::collapsible_calls::COLLAPSIBLE_SPAN_LINT_CALLS,
     #[cfg(feature = "internal")]
-    utils::internal_lints::COMPILER_LINT_FUNCTIONS,
+    utils::internal_lints::compiler_lint_functions::COMPILER_LINT_FUNCTIONS,
     #[cfg(feature = "internal")]
-    utils::internal_lints::DEFAULT_DEPRECATION_REASON,
+    utils::internal_lints::if_chain_style::IF_CHAIN_STYLE,
     #[cfg(feature = "internal")]
-    utils::internal_lints::DEFAULT_LINT,
+    utils::internal_lints::interning_defined_symbol::INTERNING_DEFINED_SYMBOL,
     #[cfg(feature = "internal")]
-    utils::internal_lints::IF_CHAIN_STYLE,
+    utils::internal_lints::interning_defined_symbol::UNNECESSARY_SYMBOL_STR,
     #[cfg(feature = "internal")]
-    utils::internal_lints::INTERNING_DEFINED_SYMBOL,
+    utils::internal_lints::invalid_paths::INVALID_PATHS,
     #[cfg(feature = "internal")]
-    utils::internal_lints::INVALID_CLIPPY_VERSION_ATTRIBUTE,
+    utils::internal_lints::lint_without_lint_pass::DEFAULT_DEPRECATION_REASON,
     #[cfg(feature = "internal")]
-    utils::internal_lints::INVALID_PATHS,
+    utils::internal_lints::lint_without_lint_pass::DEFAULT_LINT,
     #[cfg(feature = "internal")]
-    utils::internal_lints::LINT_WITHOUT_LINT_PASS,
+    utils::internal_lints::lint_without_lint_pass::INVALID_CLIPPY_VERSION_ATTRIBUTE,
     #[cfg(feature = "internal")]
-    utils::internal_lints::MISSING_CLIPPY_VERSION_ATTRIBUTE,
+    utils::internal_lints::lint_without_lint_pass::LINT_WITHOUT_LINT_PASS,
     #[cfg(feature = "internal")]
-    utils::internal_lints::MISSING_MSRV_ATTR_IMPL,
+    utils::internal_lints::lint_without_lint_pass::MISSING_CLIPPY_VERSION_ATTRIBUTE,
     #[cfg(feature = "internal")]
-    utils::internal_lints::OUTER_EXPN_EXPN_DATA,
+    utils::internal_lints::msrv_attr_impl::MISSING_MSRV_ATTR_IMPL,
     #[cfg(feature = "internal")]
-    utils::internal_lints::PRODUCE_ICE,
+    utils::internal_lints::outer_expn_data_pass::OUTER_EXPN_EXPN_DATA,
     #[cfg(feature = "internal")]
-    utils::internal_lints::UNNECESSARY_DEF_PATH,
+    utils::internal_lints::produce_ice::PRODUCE_ICE,
     #[cfg(feature = "internal")]
-    utils::internal_lints::UNNECESSARY_SYMBOL_STR,
+    utils::internal_lints::unnecessary_def_path::UNNECESSARY_DEF_PATH,
     almost_complete_letter_range::ALMOST_COMPLETE_LETTER_RANGE,
     approx_const::APPROX_CONSTANT,
     as_conversions::AS_CONVERSIONS,
@@ -164,6 +164,7 @@ store.register_lints(&[
     format_args::FORMAT_IN_FORMAT_ARGS,
     format_args::TO_STRING_IN_FORMAT_ARGS,
     format_args::UNINLINED_FORMAT_ARGS,
+    format_args::UNUSED_FORMAT_SPECS,
     format_impl::PRINT_IN_FORMAT_IMPL,
     format_impl::RECURSIVE_FORMAT_IMPL,
     format_push_string::FORMAT_PUSH_STRING,
@@ -229,7 +230,6 @@ store.register_lints(&[
     loops::EXPLICIT_INTO_ITER_LOOP,
     loops::EXPLICIT_ITER_LOOP,
     loops::FOR_KV_MAP,
-    loops::FOR_LOOPS_OVER_FALLIBLES,
     loops::ITER_NEXT_LOOP,
     loops::MANUAL_FIND,
     loops::MANUAL_FLATTEN,
@@ -407,6 +407,7 @@ store.register_lints(&[
     missing_doc::MISSING_DOCS_IN_PRIVATE_ITEMS,
     missing_enforced_import_rename::MISSING_ENFORCED_IMPORT_RENAMES,
     missing_inline::MISSING_INLINE_IN_PUBLIC_ITEMS,
+    missing_trait_methods::MISSING_TRAIT_METHODS,
     mixed_read_write_in_expression::DIVERGING_SUB_EXPRESSION,
     mixed_read_write_in_expression::MIXED_READ_WRITE_IN_EXPRESSION,
     module_style::MOD_MODULE_FILES,
@@ -479,6 +480,7 @@ store.register_lints(&[
     panic_unimplemented::TODO,
     panic_unimplemented::UNIMPLEMENTED,
     panic_unimplemented::UNREACHABLE,
+    partial_pub_fields::PARTIAL_PUB_FIELDS,
     partialeq_ne_impl::PARTIALEQ_NE_IMPL,
     partialeq_to_none::PARTIALEQ_TO_NONE,
     pass_by_ref_or_value::LARGE_TYPES_PASSED_BY_VALUE,
