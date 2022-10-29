@@ -69,6 +69,8 @@ mod path_buf_push_overwrite;
 mod range_zip_with_len;
 mod repeat_once;
 mod search_is_some;
+mod seek_from_current;
+mod seek_to_start_instead_of_rewind;
 mod single_char_add_str;
 mod single_char_insert_string;
 mod single_char_pattern;
@@ -101,7 +103,7 @@ mod zst_offset;
 use bind_instead_of_map::BindInsteadOfMap;
 use clippy_utils::consts::{constant, Constant};
 use clippy_utils::diagnostics::{span_lint, span_lint_and_help};
-use clippy_utils::ty::{contains_adt_constructor, implements_trait, is_copy, is_type_diagnostic_item};
+use clippy_utils::ty::{contains_ty_adt_constructor_opaque, implements_trait, is_copy, is_type_diagnostic_item};
 use clippy_utils::{contains_return, is_trait_method, iter_input_pats, meets_msrv, msrvs, return_ty};
 use if_chain::if_chain;
 use rustc_hir as hir;
@@ -3066,6 +3068,80 @@ declare_clippy_lint! {
     "iterating on map using `iter` when `keys` or `values` would do"
 }
 
+declare_clippy_lint! {
+    /// ### What it does
+    ///
+    /// Checks an argument of `seek` method of `Seek` trait
+    /// and if it start seek from `SeekFrom::Current(0)`, suggests `stream_position` instead.
+    ///
+    /// ### Why is this bad?
+    ///
+    /// Readability. Use dedicated method.
+    ///
+    /// ### Example
+    ///
+    /// ```rust
+    /// use std::fs::File;
+    /// use std::io::{self, Write, Seek, SeekFrom};
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let mut f = File::create("foo.txt")?;
+    ///     f.write_all(b"Hello")?;
+    ///     eprintln!("Written {} bytes", f.seek(SeekFrom::Current(0))?);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// use std::fs::File;
+    /// use std::io::{self, Write, Seek, SeekFrom};
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let mut f = File::create("foo.txt")?;
+    ///     f.write_all(b"Hello")?;
+    ///     eprintln!("Written {} bytes", f.stream_position()?);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    #[clippy::version = "1.66.0"]
+    pub SEEK_FROM_CURRENT,
+    complexity,
+    "use dedicated method for seek from current position"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
+    ///
+    /// Checks for jumps to the start of a stream that implements `Seek`
+    /// and uses the `seek` method providing `Start` as parameter.
+    ///
+    /// ### Why is this bad?
+    ///
+    /// Readability. There is a specific method that was implemented for
+    /// this exact scenario.
+    ///
+    /// ### Example
+    /// ```rust
+    /// # use std::io;
+    /// fn foo<T: io::Seek>(t: &mut T) {
+    ///     t.seek(io::SeekFrom::Start(0));
+    /// }
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// # use std::io;
+    /// fn foo<T: io::Seek>(t: &mut T) {
+    ///     t.rewind();
+    /// }
+    /// ```
+    #[clippy::version = "1.66.0"]
+    pub SEEK_TO_START_INSTEAD_OF_REWIND,
+    complexity,
+    "jumping to the start of stream using `seek` method"
+}
+
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Option<RustcVersion>,
@@ -3190,6 +3266,8 @@ impl_lint_pass!(Methods => [
     VEC_RESIZE_TO_ZERO,
     VERBOSE_FILE_READS,
     ITER_KV_MAP,
+    SEEK_FROM_CURRENT,
+    SEEK_TO_START_INSTEAD_OF_REWIND,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -3316,34 +3394,8 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
         if let hir::ImplItemKind::Fn(_, _) = impl_item.kind {
             let ret_ty = return_ty(cx, impl_item.hir_id());
 
-            // walk the return type and check for Self (this does not check associated types)
-            if let Some(self_adt) = self_ty.ty_adt_def() {
-                if contains_adt_constructor(ret_ty, self_adt) {
-                    return;
-                }
-            } else if ret_ty.contains(self_ty) {
+            if contains_ty_adt_constructor_opaque(cx, ret_ty, self_ty) {
                 return;
-            }
-
-            // if return type is impl trait, check the associated types
-            if let ty::Opaque(def_id, _) = *ret_ty.kind() {
-                // one of the associated types must be Self
-                for &(predicate, _span) in cx.tcx.explicit_item_bounds(def_id) {
-                    if let ty::PredicateKind::Projection(projection_predicate) = predicate.kind().skip_binder() {
-                        let assoc_ty = match projection_predicate.term.unpack() {
-                            ty::TermKind::Ty(ty) => ty,
-                            ty::TermKind::Const(_c) => continue,
-                        };
-                        // walk the associated type and check for Self
-                        if let Some(self_adt) = self_ty.ty_adt_def() {
-                            if contains_adt_constructor(assoc_ty, self_adt) {
-                                return;
-                            }
-                        } else if assoc_ty.contains(self_ty) {
-                            return;
-                        }
-                    }
-                }
             }
 
             if name == "new" && ret_ty != self_ty {
@@ -3603,6 +3655,14 @@ impl Methods {
                 },
                 ("resize", [count_arg, default_arg]) => {
                     vec_resize_to_zero::check(cx, expr, count_arg, default_arg, span);
+                },
+                ("seek", [arg]) => {
+                    if meets_msrv(self.msrv, msrvs::SEEK_FROM_CURRENT) {
+                        seek_from_current::check(cx, expr, recv, arg);
+                    }
+                    if meets_msrv(self.msrv, msrvs::SEEK_REWIND) {
+                        seek_to_start_instead_of_rewind::check(cx, expr, recv, arg, span);
+                    }
                 },
                 ("sort", []) => {
                     stable_sort_primitive::check(cx, expr, recv);
