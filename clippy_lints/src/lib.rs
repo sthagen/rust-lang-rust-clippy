@@ -268,6 +268,7 @@ mod strings;
 mod strlen_on_c_strings;
 mod suspicious_operation_groupings;
 mod suspicious_trait_impl;
+mod suspicious_xor_used_as_pow;
 mod swap;
 mod swap_ptr_to_ref;
 mod tabs_in_doc_comments;
@@ -875,13 +876,14 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::<only_used_in_recursion::OnlyUsedInRecursion>::default());
     let allow_dbg_in_tests = conf.allow_dbg_in_tests;
     store.register_late_pass(move |_| Box::new(dbg_macro::DbgMacro::new(allow_dbg_in_tests)));
+    let allow_print_in_tests = conf.allow_print_in_tests;
+    store.register_late_pass(move |_| Box::new(write::Write::new(allow_print_in_tests)));
     let cargo_ignore_publish = conf.cargo_ignore_publish;
     store.register_late_pass(move |_| {
         Box::new(cargo::Cargo {
             ignore_publish: cargo_ignore_publish,
         })
     });
-    store.register_late_pass(|_| Box::<write::Write>::default());
     store.register_early_pass(|| Box::new(crate_in_macro_def::CrateInMacroDef));
     store.register_early_pass(|| Box::new(empty_structs_with_brackets::EmptyStructsWithBrackets));
     store.register_late_pass(|_| Box::new(unnecessary_owned_empty_strings::UnnecessaryOwnedEmptyStrings));
@@ -916,6 +918,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_early_pass(|| Box::new(partial_pub_fields::PartialPubFields));
     store.register_late_pass(|_| Box::new(missing_trait_methods::MissingTraitMethods));
     store.register_late_pass(|_| Box::new(from_raw_with_void_ptr::FromRawWithVoidPtr));
+    store.register_late_pass(|_| Box::new(suspicious_xor_used_as_pow::ConfusingXorAndPow));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

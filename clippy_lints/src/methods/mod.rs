@@ -160,7 +160,7 @@ declare_clippy_lint! {
     /// ```rust
     /// let hello = "hesuo worpd".replace(&['s', 'u', 'p'], "l");
     /// ```
-    #[clippy::version = "1.64.0"]
+    #[clippy::version = "1.65.0"]
     pub COLLAPSIBLE_STR_REPLACE,
     perf,
     "collapse consecutive calls to str::replace (2 or more) into a single call"
@@ -2096,8 +2096,7 @@ declare_clippy_lint! {
     /// let s = "Hello world!";
     /// let cow = Cow::Borrowed(s);
     ///
-    /// let data = cow.into_owned();
-    /// assert!(matches!(data, String))
+    /// let _data: String = cow.into_owned();
     /// ```
     #[clippy::version = "1.65.0"]
     pub SUSPICIOUS_TO_OWNED,
@@ -2428,7 +2427,7 @@ declare_clippy_lint! {
     /// ### Known problems
     ///
     /// The type of the resulting iterator might become incompatible with its usage
-    #[clippy::version = "1.64.0"]
+    #[clippy::version = "1.65.0"]
     pub ITER_ON_SINGLE_ITEMS,
     nursery,
     "Iterator for array of length 1"
@@ -2460,7 +2459,7 @@ declare_clippy_lint! {
     /// ### Known problems
     ///
     /// The type of the resulting iterator might become incompatible with its usage
-    #[clippy::version = "1.64.0"]
+    #[clippy::version = "1.65.0"]
     pub ITER_ON_EMPTY_COLLECTIONS,
     nursery,
     "Iterator for empty array"
