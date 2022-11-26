@@ -1,19 +1,22 @@
 use clippy_utils::diagnostics::{span_lint_and_sugg, span_lint_and_then};
+use clippy_utils::is_diag_trait_item;
 use clippy_utils::macros::FormatParamKind::{Implicit, Named, Numbered, Starred};
 use clippy_utils::macros::{
     is_format_macro, is_panic, root_macro_call, Count, FormatArg, FormatArgsExpn, FormatParam, FormatParamUsage,
 };
+use clippy_utils::msrvs::{self, Msrv};
 use clippy_utils::source::snippet_opt;
 use clippy_utils::ty::{implements_trait, is_type_diagnostic_item};
-use clippy_utils::{is_diag_trait_item, meets_msrv, msrvs};
 use if_chain::if_chain;
 use itertools::Itertools;
-use rustc_errors::Applicability;
+use rustc_errors::{
+    Applicability,
+    SuggestionStyle::{CompletelyHidden, ShowCode},
+};
 use rustc_hir::{Expr, ExprKind, HirId, QPath};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_middle::ty::adjustment::{Adjust, Adjustment};
 use rustc_middle::ty::Ty;
-use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::def_id::DefId;
 use rustc_span::edition::Edition::Edition2021;
@@ -158,12 +161,12 @@ impl_lint_pass!(FormatArgs => [
 ]);
 
 pub struct FormatArgs {
-    msrv: Option<RustcVersion>,
+    msrv: Msrv,
 }
 
 impl FormatArgs {
     #[must_use]
-    pub fn new(msrv: Option<RustcVersion>) -> Self {
+    pub fn new(msrv: Msrv) -> Self {
         Self { msrv }
     }
 }
@@ -188,7 +191,7 @@ impl<'tcx> LateLintPass<'tcx> for FormatArgs {
                 check_format_in_format_args(cx, outermost_expn_data.call_site, name, arg.param.value);
                 check_to_string_in_format_args(cx, name, arg.param.value);
             }
-            if meets_msrv(self.msrv, msrvs::FORMAT_ARGS_CAPTURE) {
+            if self.msrv.meets(msrvs::FORMAT_ARGS_CAPTURE) {
                 check_uninlined_args(cx, &format_args, outermost_expn_data.call_site, macro_def_id);
             }
         }
@@ -286,10 +289,9 @@ fn check_uninlined_args(cx: &LateContext<'_>, args: &FormatArgsExpn<'_>, call_si
         return;
     }
 
-    // Temporarily ignore multiline spans: https://github.com/rust-lang/rust/pull/102729#discussion_r988704308
-    if fixes.iter().any(|(span, _)| cx.sess().source_map().is_multiline(*span)) {
-        return;
-    }
+    // multiline span display suggestion is sometimes broken: https://github.com/rust-lang/rust/pull/102729#discussion_r988704308
+    // in those cases, make the code suggestion hidden
+    let multiline_fix = fixes.iter().any(|(span, _)| cx.sess().source_map().is_multiline(*span));
 
     span_lint_and_then(
         cx,
@@ -297,7 +299,12 @@ fn check_uninlined_args(cx: &LateContext<'_>, args: &FormatArgsExpn<'_>, call_si
         call_site,
         "variables can be used directly in the `format!` string",
         |diag| {
-            diag.multipart_suggestion("change this to", fixes, Applicability::MachineApplicable);
+            diag.multipart_suggestion_with_style(
+                "change this to",
+                fixes,
+                Applicability::MachineApplicable,
+                if multiline_fix { CompletelyHidden } else { ShowCode },
+            );
         },
     );
 }

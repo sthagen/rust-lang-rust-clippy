@@ -104,17 +104,16 @@ mod zst_offset;
 use bind_instead_of_map::BindInsteadOfMap;
 use clippy_utils::consts::{constant, Constant};
 use clippy_utils::diagnostics::{span_lint, span_lint_and_help};
+use clippy_utils::msrvs::{self, Msrv};
 use clippy_utils::ty::{contains_ty_adt_constructor_opaque, implements_trait, is_copy, is_type_diagnostic_item};
-use clippy_utils::{contains_return, is_trait_method, iter_input_pats, meets_msrv, msrvs, return_ty};
+use clippy_utils::{contains_return, is_bool, is_trait_method, iter_input_pats, return_ty};
 use if_chain::if_chain;
 use rustc_hir as hir;
-use rustc_hir::def::Res;
-use rustc_hir::{Expr, ExprKind, PrimTy, QPath, TraitItem, TraitItemKind};
+use rustc_hir::{Expr, ExprKind, TraitItem, TraitItemKind};
 use rustc_hir_analysis::hir_ty_to_ty;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::{self, TraitRef, Ty};
-use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::{sym, Span};
 
@@ -832,32 +831,30 @@ declare_clippy_lint! {
     /// etc. instead.
     ///
     /// ### Why is this bad?
-    /// The function will always be called and potentially
-    /// allocate an object acting as the default.
+    /// The function will always be called. This is only bad if it allocates or
+    /// does some non-trivial amount of work.
     ///
     /// ### Known problems
-    /// If the function has side-effects, not calling it will
-    /// change the semantic of the program, but you shouldn't rely on that anyway.
+    /// If the function has side-effects, not calling it will change the
+    /// semantic of the program, but you shouldn't rely on that.
+    ///
+    /// The lint also cannot figure out whether the function you call is
+    /// actually expensive to call or not.
     ///
     /// ### Example
     /// ```rust
     /// # let foo = Some(String::new());
-    /// foo.unwrap_or(String::new());
+    /// foo.unwrap_or(String::from("empty"));
     /// ```
     ///
     /// Use instead:
     /// ```rust
     /// # let foo = Some(String::new());
-    /// foo.unwrap_or_else(String::new);
-    ///
-    /// // or
-    ///
-    /// # let foo = Some(String::new());
-    /// foo.unwrap_or_default();
+    /// foo.unwrap_or_else(|| String::from("empty"));
     /// ```
     #[clippy::version = "pre 1.29.0"]
     pub OR_FUN_CALL,
-    perf,
+    nursery,
     "using any `*or` method with a function call, which suggests `*or_else`"
 }
 
@@ -3080,7 +3077,7 @@ declare_clippy_lint! {
     ///
     /// ### Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use std::fs::File;
     /// use std::io::{self, Write, Seek, SeekFrom};
     ///
@@ -3093,7 +3090,7 @@ declare_clippy_lint! {
     /// }
     /// ```
     /// Use instead:
-    /// ```rust
+    /// ```rust,no_run
     /// use std::fs::File;
     /// use std::io::{self, Write, Seek, SeekFrom};
     ///
@@ -3166,7 +3163,7 @@ declare_clippy_lint! {
 
 pub struct Methods {
     avoid_breaking_exported_api: bool,
-    msrv: Option<RustcVersion>,
+    msrv: Msrv,
     allow_expect_in_tests: bool,
     allow_unwrap_in_tests: bool,
 }
@@ -3175,7 +3172,7 @@ impl Methods {
     #[must_use]
     pub fn new(
         avoid_breaking_exported_api: bool,
-        msrv: Option<RustcVersion>,
+        msrv: Msrv,
         allow_expect_in_tests: bool,
         allow_unwrap_in_tests: bool,
     ) -> Self {
@@ -3328,7 +3325,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
                 single_char_add_str::check(cx, expr, receiver, args);
                 into_iter_on_ref::check(cx, expr, method_span, method_call.ident.name, receiver);
                 single_char_pattern::check(cx, expr, method_call.ident.name, receiver, args);
-                unnecessary_to_owned::check(cx, expr, method_call.ident.name, receiver, args, self.msrv);
+                unnecessary_to_owned::check(cx, expr, method_call.ident.name, receiver, args, &self.msrv);
             },
             hir::ExprKind::Binary(op, lhs, rhs) if op.node == hir::BinOpKind::Eq || op.node == hir::BinOpKind::Ne => {
                 let mut info = BinaryExprInfo {
@@ -3351,15 +3348,15 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
         let name = impl_item.ident.name.as_str();
         let parent = cx.tcx.hir().get_parent_item(impl_item.hir_id()).def_id;
         let item = cx.tcx.hir().expect_item(parent);
-        let self_ty = cx.tcx.type_of(item.def_id);
+        let self_ty = cx.tcx.type_of(item.owner_id);
 
         let implements_trait = matches!(item.kind, hir::ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }));
         if let hir::ImplItemKind::Fn(ref sig, id) = impl_item.kind {
-            let method_sig = cx.tcx.fn_sig(impl_item.def_id);
+            let method_sig = cx.tcx.fn_sig(impl_item.owner_id);
             let method_sig = cx.tcx.erase_late_bound_regions(method_sig);
             let first_arg_ty_opt = method_sig.inputs().iter().next().copied();
             // if this impl block implements a trait, lint in trait definition instead
-            if !implements_trait && cx.access_levels.is_exported(impl_item.def_id.def_id) {
+            if !implements_trait && cx.effective_visibilities.is_exported(impl_item.owner_id.def_id) {
                 // check missing trait implementations
                 for method_config in &TRAIT_METHODS {
                     if name == method_config.method_name
@@ -3393,7 +3390,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
 
             if sig.decl.implicit_self.has_implicit_self()
                     && !(self.avoid_breaking_exported_api
-                    && cx.access_levels.is_exported(impl_item.def_id.def_id))
+                    && cx.effective_visibilities.is_exported(impl_item.owner_id.def_id))
                     && let Some(first_arg) = iter_input_pats(sig.decl, cx.tcx.hir().body(id)).next()
                     && let Some(first_arg_ty) = first_arg_ty_opt
                 {
@@ -3445,7 +3442,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
             then {
                 let first_arg_span = first_arg_ty.span;
                 let first_arg_ty = hir_ty_to_ty(cx.tcx, first_arg_ty);
-                let self_ty = TraitRef::identity(cx.tcx, item.def_id.to_def_id())
+                let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id())
                     .self_ty()
                     .skip_binder();
                 wrong_self_convention::check(
@@ -3464,7 +3461,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
             if item.ident.name == sym::new;
             if let TraitItemKind::Fn(_, _) = item.kind;
             let ret_ty = return_ty(cx, item.hir_id());
-            let self_ty = TraitRef::identity(cx.tcx, item.def_id.to_def_id())
+            let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id())
                 .self_ty()
                 .skip_binder();
             if !ret_ty.contains(self_ty);
@@ -3504,7 +3501,7 @@ impl Methods {
                 ("as_mut", []) => useless_asref::check(cx, expr, "as_mut", recv),
                 ("as_ref", []) => useless_asref::check(cx, expr, "as_ref", recv),
                 ("assume_init", []) => uninit_assumed_init::check(cx, expr, recv),
-                ("cloned", []) => cloned_instead_of_copied::check(cx, expr, recv, span, self.msrv),
+                ("cloned", []) => cloned_instead_of_copied::check(cx, expr, recv, span, &self.msrv),
                 ("collect", []) if is_trait_method(cx, expr, sym::Iterator) => {
                     needless_collect::check(cx, span, expr, recv, call_span);
                     match method_call(recv) {
@@ -3515,7 +3512,7 @@ impl Methods {
                             map_collect_result_unit::check(cx, expr, m_recv, m_arg);
                         },
                         Some(("take", take_self_arg, [take_arg], _, _)) => {
-                            if meets_msrv(self.msrv, msrvs::STR_REPEAT) {
+                            if self.msrv.meets(msrvs::STR_REPEAT) {
                                 manual_str_repeat::check(cx, expr, recv, take_self_arg, take_arg);
                             }
                         },
@@ -3542,7 +3539,7 @@ impl Methods {
                 },
                 ("expect", [_]) => match method_call(recv) {
                     Some(("ok", recv, [], _, _)) => ok_expect::check(cx, expr, recv),
-                    Some(("err", recv, [], err_span, _)) => err_expect::check(cx, expr, recv, self.msrv, span, err_span),
+                    Some(("err", recv, [], err_span, _)) => err_expect::check(cx, expr, recv, span, err_span, &self.msrv),
                     _ => expect_used::check(cx, expr, recv, false, self.allow_expect_in_tests),
                 },
                 ("expect_err", [_]) => expect_used::check(cx, expr, recv, true, self.allow_expect_in_tests),
@@ -3581,7 +3578,7 @@ impl Methods {
                     unit_hash::check(cx, expr, recv, arg);
                 },
                 ("is_file", []) => filetype_is_file::check(cx, expr, recv),
-                ("is_digit", [radix]) => is_digit_ascii_radix::check(cx, expr, recv, radix, self.msrv),
+                ("is_digit", [radix]) => is_digit_ascii_radix::check(cx, expr, recv, radix, &self.msrv),
                 ("is_none", []) => check_is_some_is_none(cx, expr, recv, false),
                 ("is_some", []) => check_is_some_is_none(cx, expr, recv, true),
                 ("iter" | "iter_mut" | "into_iter", []) => {
@@ -3604,7 +3601,7 @@ impl Methods {
                 },
                 (name @ ("map" | "map_err"), [m_arg]) => {
                     if name == "map" {
-                        map_clone::check(cx, expr, recv, m_arg, self.msrv);
+                        map_clone::check(cx, expr, recv, m_arg, &self.msrv);
                         if let Some((map_name @ ("iter" | "into_iter"), recv2, _, _, _)) = method_call(recv) {
                             iter_kv_map::check(cx, map_name, expr, recv2, m_arg);
                         }
@@ -3613,8 +3610,8 @@ impl Methods {
                     }
                     if let Some((name, recv2, args, span2,_)) = method_call(recv) {
                         match (name, args) {
-                            ("as_mut", []) => option_as_ref_deref::check(cx, expr, recv2, m_arg, true, self.msrv),
-                            ("as_ref", []) => option_as_ref_deref::check(cx, expr, recv2, m_arg, false, self.msrv),
+                            ("as_mut", []) => option_as_ref_deref::check(cx, expr, recv2, m_arg, true, &self.msrv),
+                            ("as_ref", []) => option_as_ref_deref::check(cx, expr, recv2, m_arg, false, &self.msrv),
                             ("filter", [f_arg]) => {
                                 filter_map::check(cx, expr, recv2, f_arg, span2, recv, m_arg, span, false);
                             },
@@ -3635,7 +3632,7 @@ impl Methods {
                         match (name2, args2) {
                             ("cloned", []) => iter_overeager_cloned::check(cx, expr, recv, recv2, false, false),
                             ("filter", [arg]) => filter_next::check(cx, expr, recv2, arg),
-                            ("filter_map", [arg]) => filter_map_next::check(cx, expr, recv2, arg, self.msrv),
+                            ("filter_map", [arg]) => filter_map_next::check(cx, expr, recv2, arg, &self.msrv),
                             ("iter", []) => iter_next_slice::check(cx, expr, recv2),
                             ("skip", [arg]) => iter_skip_next::check(cx, expr, recv2, arg),
                             ("skip_while", [_]) => skip_while_next::check(cx, expr),
@@ -3683,10 +3680,10 @@ impl Methods {
                     vec_resize_to_zero::check(cx, expr, count_arg, default_arg, span);
                 },
                 ("seek", [arg]) => {
-                    if meets_msrv(self.msrv, msrvs::SEEK_FROM_CURRENT) {
+                    if self.msrv.meets(msrvs::SEEK_FROM_CURRENT) {
                         seek_from_current::check(cx, expr, recv, arg);
                     }
-                    if meets_msrv(self.msrv, msrvs::SEEK_REWIND) {
+                    if self.msrv.meets(msrvs::SEEK_REWIND) {
                         seek_to_start_instead_of_rewind::check(cx, expr, recv, arg, span);
                     }
                 },
@@ -3702,7 +3699,7 @@ impl Methods {
                 ("splitn" | "rsplitn", [count_arg, pat_arg]) => {
                     if let Some((Constant::Int(count), _)) = constant(cx, cx.typeck_results(), count_arg) {
                         suspicious_splitn::check(cx, name, expr, recv, count);
-                        str_splitn::check(cx, name, expr, recv, pat_arg, count, self.msrv);
+                        str_splitn::check(cx, name, expr, recv, pat_arg, count, &self.msrv);
                     }
                 },
                 ("splitn_mut" | "rsplitn_mut", [count_arg, _]) => {
@@ -3720,7 +3717,7 @@ impl Methods {
                 },
                 ("take", []) => needless_option_take::check(cx, expr, recv),
                 ("then", [arg]) => {
-                    if !meets_msrv(self.msrv, msrvs::BOOL_THEN_SOME) {
+                    if !self.msrv.meets(msrvs::BOOL_THEN_SOME) {
                         return;
                     }
                     unnecessary_lazy_eval::check(cx, expr, recv, arg, "then_some");
@@ -3763,7 +3760,7 @@ impl Methods {
                 },
                 ("unwrap_or_else", [u_arg]) => match method_call(recv) {
                     Some(("map", recv, [map_arg], _, _))
-                        if map_unwrap_or::check(cx, expr, recv, map_arg, u_arg, self.msrv) => {},
+                        if map_unwrap_or::check(cx, expr, recv, map_arg, u_arg, &self.msrv) => {},
                     _ => {
                         unwrap_or_else_default::check(cx, expr, recv, u_arg);
                         unnecessary_lazy_eval::check(cx, expr, recv, u_arg, "unwrap_or");
@@ -3989,14 +3986,6 @@ impl OutType {
             (Self::Ref, &hir::FnRetTy::Return(ty)) => matches!(ty.kind, hir::TyKind::Rptr(_, _)),
             _ => false,
         }
-    }
-}
-
-fn is_bool(ty: &hir::Ty<'_>) -> bool {
-    if let hir::TyKind::Path(QPath::Resolved(_, path)) = ty.kind {
-        matches!(path.res, Res::PrimTy(PrimTy::Bool))
-    } else {
-        false
     }
 }
 
