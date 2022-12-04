@@ -253,7 +253,7 @@ declare_clippy_lint! {
     /// ```
     #[clippy::version = "1.66.0"]
     pub UNNECESSARY_SAFETY_DOC,
-    style,
+    restriction,
     "`pub fn` or `pub trait` with `# Safety` docs"
 }
 
@@ -427,9 +427,7 @@ fn lint_for_missing_headers(
                 let body = cx.tcx.hir().body(body_id);
                 let ret_ty = typeck.expr_ty(body.value);
                 if implements_trait(cx, ret_ty, future, &[]);
-                if let ty::Opaque(_, subs) = ret_ty.kind();
-                if let Some(gen) = subs.types().next();
-                if let ty::Generator(_, subs, _) = gen.kind();
+                if let ty::Generator(_, subs, _) = ret_ty.kind();
                 if is_type_diagnostic_item(cx, subs.as_generator().return_ty(), sym::Result);
                 then {
                     span_lint(

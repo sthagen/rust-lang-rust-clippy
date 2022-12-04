@@ -26,7 +26,6 @@
 extern crate rustc_arena;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
-extern crate rustc_attr;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_errors;
@@ -828,7 +827,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         ))
     });
     store.register_late_pass(move |_| Box::new(undocumented_unsafe_blocks::UndocumentedUnsafeBlocks));
-    store.register_late_pass(move |_| Box::new(format_args::FormatArgs::new(msrv())));
+    let allow_mixed_uninlined = conf.allow_mixed_uninlined_format_args;
+    store.register_late_pass(move |_| Box::new(format_args::FormatArgs::new(msrv(), allow_mixed_uninlined)));
     store.register_late_pass(|_| Box::new(trailing_empty_array::TrailingEmptyArray));
     store.register_early_pass(|| Box::new(octal_escapes::OctalEscapes));
     store.register_late_pass(|_| Box::new(needless_late_init::NeedlessLateInit));
