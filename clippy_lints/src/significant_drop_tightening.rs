@@ -61,6 +61,34 @@ pub struct SignificantDropTightening<'tcx> {
 }
 
 impl<'tcx> SignificantDropTightening<'tcx> {
+    /// Unifies the statements of a block with its return expression.
+    fn all_block_stmts<'ret, 'rslt, 'stmts>(
+        block_stmts: &'stmts [hir::Stmt<'tcx>],
+        dummy_ret_stmt: Option<&'ret hir::Stmt<'tcx>>,
+    ) -> impl Iterator<Item = &'rslt hir::Stmt<'tcx>>
+    where
+        'ret: 'rslt,
+        'stmts: 'rslt,
+    {
+        block_stmts.iter().chain(dummy_ret_stmt)
+    }
+
+    /// Searches for at least one statement that could slow down the release of a significant drop.
+    fn at_least_one_stmt_is_expensive<'stmt>(stmts: impl Iterator<Item = &'stmt hir::Stmt<'tcx>>) -> bool
+    where
+        'tcx: 'stmt,
+    {
+        for stmt in stmts {
+            match stmt.kind {
+                hir::StmtKind::Expr(expr) if let hir::ExprKind::Path(_) = expr.kind => {}
+                hir::StmtKind::Local(local) if let Some(expr) = local.init
+                    && let hir::ExprKind::Path(_) = expr.kind => {},
+                _ => return true
+            };
+        }
+        false
+    }
+
     /// Verifies if the expression is of type `drop(some_lock_path)` to assert that the temporary
     /// is already being dropped before the end of its scope.
     fn has_drop(expr: &'tcx hir::Expr<'_>, init_bind_ident: Ident) -> bool {
@@ -87,7 +115,7 @@ impl<'tcx> SignificantDropTightening<'tcx> {
         expr: &'tcx hir::Expr<'_>,
         idx: usize,
         sdap: &mut SigDropAuxParams,
-        stmt: &'tcx hir::Stmt<'_>,
+        stmt: &hir::Stmt<'_>,
         cb: impl Fn(&mut SigDropAuxParams),
     ) {
         let mut sig_drop_finder = SigDropFinder::new(cx, &mut self.seen_types);
@@ -105,7 +133,7 @@ impl<'tcx> SignificantDropTightening<'tcx> {
         }
     }
 
-    /// Shows a generic overall message as well as specialized messages depending on the usage.
+    /// Shows generic overall messages as well as specialized messages depending on the usage.
     fn set_suggestions(cx: &LateContext<'tcx>, block_span: Span, diag: &mut Diagnostic, sdap: &SigDropAuxParams) {
         match sdap.number_of_stmts {
             0 | 1 => {},
@@ -160,8 +188,13 @@ impl<'tcx> SignificantDropTightening<'tcx> {
 
 impl<'tcx> LateLintPass<'tcx> for SignificantDropTightening<'tcx> {
     fn check_block(&mut self, cx: &LateContext<'tcx>, block: &'tcx hir::Block<'_>) {
+        let dummy_ret_stmt = block.expr.map(|expr| hir::Stmt {
+            hir_id: hir::HirId::INVALID,
+            kind: hir::StmtKind::Expr(expr),
+            span: DUMMY_SP,
+        });
         let mut sdap = SigDropAuxParams::default();
-        for (idx, stmt) in block.stmts.iter().enumerate() {
+        for (idx, stmt) in Self::all_block_stmts(block.stmts, dummy_ret_stmt.as_ref()).enumerate() {
             match stmt.kind {
                 hir::StmtKind::Expr(expr) => self.modify_sdap_if_sig_drop_exists(
                     cx,
@@ -198,13 +231,13 @@ impl<'tcx> LateLintPass<'tcx> for SignificantDropTightening<'tcx> {
                     }
                     self.modify_sdap_if_sig_drop_exists(cx, expr, idx, &mut sdap, stmt, |_| {});
                 },
-                _ => continue
+                _ => {}
             };
         }
-        if sdap.number_of_stmts > 1 && {
-            let last_stmts_idx = block.stmts.len().wrapping_sub(1);
-            sdap.last_use_stmt_idx != last_stmts_idx
-        } {
+
+        let idx = sdap.last_use_stmt_idx.wrapping_add(1);
+        let stmts_after_last_use = Self::all_block_stmts(block.stmts, dummy_ret_stmt.as_ref()).skip(idx);
+        if sdap.number_of_stmts > 1 && Self::at_least_one_stmt_is_expensive(stmts_after_last_use) {
             span_lint_and_then(
                 cx,
                 SIGNIFICANT_DROP_TIGHTENING,
