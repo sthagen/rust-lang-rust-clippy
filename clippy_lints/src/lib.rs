@@ -219,6 +219,7 @@ mod neg_cmp_op_on_partial_ord;
 mod neg_multiply;
 mod new_without_default;
 mod no_effect;
+mod no_mangle_with_rust_abi;
 mod non_copy_const;
 mod non_expressive_names;
 mod non_octal_unix_permissions;
@@ -668,12 +669,13 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         ))
     });
     let doc_valid_idents = conf.doc_valid_idents.iter().cloned().collect::<FxHashSet<_>>();
+    let missing_docs_in_crate_items = conf.missing_docs_in_crate_items;
     store.register_late_pass(move |_| Box::new(doc::DocMarkdown::new(doc_valid_idents.clone())));
     store.register_late_pass(|_| Box::new(neg_multiply::NegMultiply));
     store.register_late_pass(|_| Box::new(mem_forget::MemForget));
     store.register_late_pass(|_| Box::new(let_if_seq::LetIfSeq));
     store.register_late_pass(|_| Box::new(mixed_read_write_in_expression::EvalOrderDependence));
-    store.register_late_pass(|_| Box::new(missing_doc::MissingDoc::new()));
+    store.register_late_pass(move |_| Box::new(missing_doc::MissingDoc::new(missing_docs_in_crate_items)));
     store.register_late_pass(|_| Box::new(missing_inline::MissingInline));
     store.register_late_pass(move |_| Box::new(exhaustive_items::ExhaustiveItems));
     store.register_late_pass(|_| Box::new(match_result_ok::MatchResultOk));
@@ -915,7 +917,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(permissions_set_readonly_false::PermissionsSetReadonlyFalse));
     store.register_late_pass(|_| Box::new(size_of_ref::SizeOfRef));
     store.register_late_pass(|_| Box::new(multiple_unsafe_ops_per_block::MultipleUnsafeOpsPerBlock));
-    store.register_late_pass(|_| Box::new(extra_unused_type_parameters::ExtraUnusedTypeParameters));
+    store.register_late_pass(move |_| {
+        Box::new(extra_unused_type_parameters::ExtraUnusedTypeParameters::new(
+            avoid_breaking_exported_api,
+        ))
+    });
+    store.register_late_pass(|_| Box::new(no_mangle_with_rust_abi::NoMangleWithRustAbi));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
