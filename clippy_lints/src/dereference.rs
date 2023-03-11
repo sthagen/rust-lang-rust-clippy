@@ -1049,7 +1049,7 @@ fn binding_ty_auto_deref_stability<'tcx>(
                     ))
                     .is_sized(cx.tcx, cx.param_env.without_caller_bounds()),
             ),
-            TyKind::OpaqueDef(..) | TyKind::Infer | TyKind::Typeof(..) | TyKind::TraitObject(..) | TyKind::Err => {
+            TyKind::OpaqueDef(..) | TyKind::Infer | TyKind::Typeof(..) | TyKind::TraitObject(..) | TyKind::Err(_) => {
                 Position::ReborrowStable(precedence)
             },
         };
@@ -1065,7 +1065,7 @@ fn ty_contains_infer(ty: &hir::Ty<'_>) -> bool {
             if self.0
                 || matches!(
                     ty.kind,
-                    TyKind::OpaqueDef(..) | TyKind::Infer | TyKind::Typeof(_) | TyKind::Err
+                    TyKind::OpaqueDef(..) | TyKind::Infer | TyKind::Typeof(_) | TyKind::Err(_)
                 )
             {
                 self.0 = true;
@@ -1357,10 +1357,10 @@ fn replace_types<'tcx>(
                     && let Some(term_ty) = projection_predicate.term.ty()
                     && let ty::Param(term_param_ty) = term_ty.kind()
                 {
-                    let item_def_id = projection_predicate.projection_ty.def_id;
-                    let assoc_item = cx.tcx.associated_item(item_def_id);
-                    let projection = cx.tcx
-                        .mk_projection(assoc_item.def_id, cx.tcx.mk_substs_trait(new_ty, []));
+                    let projection = cx.tcx.mk_ty_from_kind(ty::Alias(
+                        ty::Projection,
+                        projection_predicate.projection_ty.with_self_ty(cx.tcx, new_ty),
+                    ));
 
                     if let Ok(projected_ty) = cx.tcx.try_normalize_erasing_regions(cx.param_env, projection)
                         && substs[term_param_ty.index as usize] != ty::GenericArg::from(projected_ty)
