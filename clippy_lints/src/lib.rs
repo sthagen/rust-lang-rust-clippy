@@ -67,6 +67,7 @@ mod declared_lints;
 mod renamed_lints;
 
 // begin lints modules, do not remove this comment, it’s used in `update_lints`
+mod allow_attributes;
 mod almost_complete_range;
 mod approx_const;
 mod as_conversions;
@@ -656,7 +657,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(empty_enum::EmptyEnum));
     store.register_late_pass(|_| Box::new(invalid_upcast_comparisons::InvalidUpcastComparisons));
     store.register_late_pass(|_| Box::new(regex::Regex));
-    store.register_late_pass(|_| Box::new(copies::CopyAndPaste));
+    let ignore_interior_mutability = conf.ignore_interior_mutability.clone();
+    store.register_late_pass(move |_| Box::new(copies::CopyAndPaste::new(ignore_interior_mutability.clone())));
     store.register_late_pass(|_| Box::new(copy_iterator::CopyIterator));
     store.register_late_pass(|_| Box::new(format::UselessFormat));
     store.register_late_pass(|_| Box::new(swap::Swap));
@@ -933,6 +935,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(missing_assert_message::MissingAssertMessage));
     store.register_early_pass(|| Box::new(redundant_async_block::RedundantAsyncBlock));
     store.register_late_pass(|_| Box::new(let_with_type_underscore::UnderscoreTyped));
+    store.register_late_pass(|_| Box::new(allow_attributes::AllowAttribute));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
