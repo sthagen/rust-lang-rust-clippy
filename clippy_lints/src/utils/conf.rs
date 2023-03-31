@@ -249,7 +249,7 @@ define_Conf! {
     /// arithmetic-side-effects-allowed-unary = ["SomeType", "AnotherType"]
     /// ```
     (arithmetic_side_effects_allowed_unary: rustc_data_structures::fx::FxHashSet<String> = <_>::default()),
-    /// Lint: ENUM_VARIANT_NAMES, LARGE_TYPES_PASSED_BY_VALUE, TRIVIALLY_COPY_PASS_BY_REF, UNNECESSARY_WRAPS, UNUSED_SELF, UPPER_CASE_ACRONYMS, WRONG_SELF_CONVENTION, BOX_COLLECTION, REDUNDANT_ALLOCATION, RC_BUFFER, VEC_BOX, OPTION_OPTION, LINKEDLIST, RC_MUTEX.
+    /// Lint: ENUM_VARIANT_NAMES, LARGE_TYPES_PASSED_BY_VALUE, TRIVIALLY_COPY_PASS_BY_REF, UNNECESSARY_WRAPS, UNUSED_SELF, UPPER_CASE_ACRONYMS, WRONG_SELF_CONVENTION, BOX_COLLECTION, REDUNDANT_ALLOCATION, RC_BUFFER, VEC_BOX, OPTION_OPTION, LINKEDLIST, RC_MUTEX, UNNECESSARY_BOX_RETURNS.
     ///
     /// Suppress lints whenever the suggested change would cause breakage for other crates.
     (avoid_breaking_exported_api: bool = true),
@@ -275,13 +275,13 @@ define_Conf! {
     ///
     /// The list of disallowed names to lint about. NB: `bar` is not here since it has legitimate uses. The value
     /// `".."` can be used as part of the list to indicate, that the configured values should be appended to the
-    /// default configuration of Clippy. By default any configuration will replace the default value.
+    /// default configuration of Clippy. By default, any configuration will replace the default value.
     (disallowed_names: Vec<String> = super::DEFAULT_DISALLOWED_NAMES.iter().map(ToString::to_string).collect()),
     /// Lint: DOC_MARKDOWN.
     ///
     /// The list of words this lint should not consider as identifiers needing ticks. The value
     /// `".."` can be used as part of the list to indicate, that the configured values should be appended to the
-    /// default configuration of Clippy. By default any configuraction will replace the default value. For example:
+    /// default configuration of Clippy. By default, any configuration will replace the default value. For example:
     /// * `doc-valid-idents = ["ClipPy"]` would replace the default list with `["ClipPy"]`.
     /// * `doc-valid-idents = ["ClipPy", ".."]` would append `ClipPy` to the default list.
     ///
@@ -390,7 +390,7 @@ define_Conf! {
     /// Enforce the named macros always use the braces specified.
     ///
     /// A `MacroMatcher` can be added like so `{ name = "macro_name", brace = "(" }`. If the macro
-    /// is could be used with a full path two `MacroMatcher`s have to be added one with the full path
+    /// could be used with a full path two `MacroMatcher`s have to be added one with the full path
     /// `crate_name::macro_name` and one with just the macro name.
     (standard_macro_braces: Vec<crate::nonstandard_macro_braces::MacroMatcher> = Vec::new()),
     /// Lint: MISSING_ENFORCED_IMPORT_RENAMES.
@@ -408,7 +408,7 @@ define_Conf! {
     /// Lint: INDEX_REFUTABLE_SLICE.
     ///
     /// When Clippy suggests using a slice pattern, this is the maximum number of elements allowed in
-    /// the slice pattern that is suggested. If more elements would be necessary, the lint is suppressed.
+    /// the slice pattern that is suggested. If more elements are necessary, the lint is suppressed.
     /// For example, `[_, _, _, e, ..]` is a slice pattern with 4 elements.
     (max_suggested_slice_pattern_length: u64 = 3),
     /// Lint: AWAIT_HOLDING_INVALID_TYPE.
@@ -459,6 +459,10 @@ define_Conf! {
     /// Whether to **only** check for missing documentation in items visible within the current
     /// crate. For example, `pub(crate)` items.
     (missing_docs_in_crate_items: bool = false),
+    /// Lint: LARGE_FUTURES.
+    ///
+    /// The maximum byte size a `Future` can have, before it triggers the `clippy::large_futures` lint
+    (future_size_threshold: u64 = 16 * 1024),
 }
 
 /// Search for the configuration file.
