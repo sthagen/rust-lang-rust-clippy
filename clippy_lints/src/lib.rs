@@ -7,7 +7,6 @@
 #![feature(let_chains)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
-#![feature(once_cell)]
 #![feature(rustc_private)]
 #![feature(stmt_expr_attributes)]
 #![recursion_limit = "512"]
@@ -186,6 +185,7 @@ mod manual_main_separator_str;
 mod manual_non_exhaustive;
 mod manual_rem_euclid;
 mod manual_retain;
+mod manual_slice_size_calculation;
 mod manual_string_new;
 mod manual_strip;
 mod map_unit_fn;
@@ -284,6 +284,7 @@ mod slow_vector_initialization;
 mod std_instead_of_core;
 mod strings;
 mod strlen_on_c_strings;
+mod suspicious_doc_comments;
 mod suspicious_operation_groupings;
 mod suspicious_trait_impl;
 mod suspicious_xor_used_as_pow;
@@ -945,7 +946,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(no_mangle_with_rust_abi::NoMangleWithRustAbi));
     store.register_late_pass(|_| Box::new(collection_is_never_read::CollectionIsNeverRead));
     store.register_late_pass(|_| Box::new(missing_assert_message::MissingAssertMessage));
-    store.register_early_pass(|| Box::new(redundant_async_block::RedundantAsyncBlock));
+    store.register_late_pass(|_| Box::new(redundant_async_block::RedundantAsyncBlock));
     store.register_late_pass(|_| Box::new(let_with_type_underscore::UnderscoreTyped));
     store.register_late_pass(|_| Box::new(allow_attributes::AllowAttribute));
     store.register_late_pass(move |_| Box::new(manual_main_separator_str::ManualMainSeparatorStr::new(msrv())));
@@ -957,6 +958,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     });
     store.register_late_pass(|_| Box::new(lines_filter_map_ok::LinesFilterMapOk));
     store.register_late_pass(|_| Box::new(tests_outside_test_module::TestsOutsideTestModule));
+    store.register_late_pass(|_| Box::new(manual_slice_size_calculation::ManualSliceSizeCalculation));
+    store.register_early_pass(|| Box::new(suspicious_doc_comments::SuspiciousDocComments));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
