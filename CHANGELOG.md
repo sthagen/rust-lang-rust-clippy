@@ -62,7 +62,7 @@ Current stable, released 2023-04-20
 
 * [`explicit_auto_deref`]: Now considers projections when determining if auto deref is applicable
   [#10386](https://github.com/rust-lang/rust-clippy/pull/10386)
-* [`manual_let_else`]: Now considers side effects of branches before linting 
+* [`manual_let_else`]: Now considers side effects of branches before linting
   [#10336](https://github.com/rust-lang/rust-clippy/pull/10336)
 * [`uninlined_format_args`]: No longer lints for arguments with generic parameters
   [#10343](https://github.com/rust-lang/rust-clippy/pull/10343)
@@ -4582,6 +4582,7 @@ Released 2018-09-13
 [`debug_assert_with_mut_call`]: https://rust-lang.github.io/rust-clippy/master/index.html#debug_assert_with_mut_call
 [`decimal_literal_representation`]: https://rust-lang.github.io/rust-clippy/master/index.html#decimal_literal_representation
 [`declare_interior_mutable_const`]: https://rust-lang.github.io/rust-clippy/master/index.html#declare_interior_mutable_const
+[`default_constructed_unit_structs`]: https://rust-lang.github.io/rust-clippy/master/index.html#default_constructed_unit_structs
 [`default_instead_of_iter_empty`]: https://rust-lang.github.io/rust-clippy/master/index.html#default_instead_of_iter_empty
 [`default_numeric_fallback`]: https://rust-lang.github.io/rust-clippy/master/index.html#default_numeric_fallback
 [`default_trait_access`]: https://rust-lang.github.io/rust-clippy/master/index.html#default_trait_access
@@ -4797,6 +4798,7 @@ Released 2018-09-13
 [`manual_strip`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_strip
 [`manual_swap`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_swap
 [`manual_unwrap_or`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_unwrap_or
+[`manual_while_let_some`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_while_let_some
 [`many_single_char_names`]: https://rust-lang.github.io/rust-clippy/master/index.html#many_single_char_names
 [`map_clone`]: https://rust-lang.github.io/rust-clippy/master/index.html#map_clone
 [`map_collect_result_unit`]: https://rust-lang.github.io/rust-clippy/master/index.html#map_collect_result_unit

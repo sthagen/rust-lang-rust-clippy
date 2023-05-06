@@ -94,6 +94,7 @@ mod crate_in_macro_def;
 mod create_dir;
 mod dbg_macro;
 mod default;
+mod default_constructed_unit_structs;
 mod default_instead_of_iter_empty;
 mod default_numeric_fallback;
 mod default_union_representation;
@@ -353,7 +354,7 @@ pub fn register_pre_expansion_lints(store: &mut rustc_lint::LintStore, sess: &Se
 pub fn read_conf(sess: &Session, path: &io::Result<(Option<PathBuf>, Vec<String>)>) -> Conf {
     if let Ok((_, warnings)) = path {
         for warning in warnings {
-            sess.warn(warning);
+            sess.warn(warning.clone());
         }
     }
     let file_name = match path {
@@ -970,6 +971,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(manual_slice_size_calculation::ManualSliceSizeCalculation));
     store.register_early_pass(|| Box::new(suspicious_doc_comments::SuspiciousDocComments));
     store.register_late_pass(|_| Box::new(items_after_test_module::ItemsAfterTestModule));
+    store.register_late_pass(|_| Box::new(default_constructed_unit_structs::DefaultConstructedUnitStructs));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
