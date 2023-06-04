@@ -4,6 +4,8 @@
 
 pub(crate) static LINTS: &[&crate::LintInfo] = &[
     #[cfg(feature = "internal")]
+    crate::utils::internal_lints::almost_standard_lint_formulation::ALMOST_STANDARD_LINT_FORMULATION_INFO,
+    #[cfg(feature = "internal")]
     crate::utils::internal_lints::clippy_lints_internal::CLIPPY_LINTS_INTERNAL_INFO,
     #[cfg(feature = "internal")]
     crate::utils::internal_lints::collapsible_calls::COLLAPSIBLE_SPAN_LINT_CALLS_INFO,
@@ -51,6 +53,7 @@ pub(crate) static LINTS: &[&crate::LintInfo] = &[
     crate::attrs::EMPTY_LINE_AFTER_DOC_COMMENTS_INFO,
     crate::attrs::EMPTY_LINE_AFTER_OUTER_ATTR_INFO,
     crate::attrs::INLINE_ALWAYS_INFO,
+    crate::attrs::MAYBE_MISUSED_CFG_INFO,
     crate::attrs::MISMATCHED_TARGET_OS_INFO,
     crate::attrs::NON_MINIMAL_CFG_INFO,
     crate::attrs::USELESS_ATTRIBUTE_INFO,
@@ -81,7 +84,6 @@ pub(crate) static LINTS: &[&crate::LintInfo] = &[
     crate::casts::CAST_POSSIBLE_WRAP_INFO,
     crate::casts::CAST_PRECISION_LOSS_INFO,
     crate::casts::CAST_PTR_ALIGNMENT_INFO,
-    crate::casts::CAST_REF_TO_MUT_INFO,
     crate::casts::CAST_SIGN_LOSS_INFO,
     crate::casts::CAST_SLICE_DIFFERENT_SIZES_INFO,
     crate::casts::CAST_SLICE_FROM_RAW_PARTS_INFO,
@@ -213,7 +215,6 @@ pub(crate) static LINTS: &[&crate::LintInfo] = &[
     crate::instant_subtraction::UNCHECKED_DURATION_SUBTRACTION_INFO,
     crate::int_plus_one::INT_PLUS_ONE_INFO,
     crate::invalid_upcast_comparisons::INVALID_UPCAST_COMPARISONS_INFO,
-    crate::invalid_utf8_in_unchecked::INVALID_UTF8_IN_UNCHECKED_INFO,
     crate::items_after_statements::ITEMS_AFTER_STATEMENTS_INFO,
     crate::items_after_test_module::ITEMS_AFTER_TEST_MODULE_INFO,
     crate::iter_not_returning_iterator::ITER_NOT_RETURNING_ITERATOR_INFO,
@@ -430,6 +431,7 @@ pub(crate) static LINTS: &[&crate::LintInfo] = &[
     crate::missing_const_for_fn::MISSING_CONST_FOR_FN_INFO,
     crate::missing_doc::MISSING_DOCS_IN_PRIVATE_ITEMS_INFO,
     crate::missing_enforced_import_rename::MISSING_ENFORCED_IMPORT_RENAMES_INFO,
+    crate::missing_fields_in_debug::MISSING_FIELDS_IN_DEBUG_INFO,
     crate::missing_inline::MISSING_INLINE_IN_PUBLIC_ITEMS_INFO,
     crate::missing_trait_methods::MISSING_TRAIT_METHODS_INFO,
     crate::mixed_read_write_in_expression::DIVERGING_SUB_EXPRESSION_INFO,

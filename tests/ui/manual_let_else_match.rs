@@ -68,7 +68,12 @@ fn fire() {
     let f = Variant::Bar(1);
 
     let _value = match f {
-        Variant::Bar(_) | Variant::Baz(_) => (),
+        Variant::Bar(v) | Variant::Baz(v) => v,
+        _ => return,
+    };
+
+    let _value = match Some(build_enum()) {
+        Some(Variant::Bar(v) | Variant::Baz(v)) => v,
         _ => return,
     };
 
