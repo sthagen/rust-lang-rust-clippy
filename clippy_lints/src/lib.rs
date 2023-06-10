@@ -68,6 +68,7 @@ mod renamed_lints;
 mod allow_attributes;
 mod almost_complete_range;
 mod approx_const;
+mod arc_with_non_send_sync;
 mod as_conversions;
 mod asm_syntax;
 mod assertions_on_constants;
@@ -114,6 +115,7 @@ mod else_if_without_else;
 mod empty_drop;
 mod empty_enum;
 mod empty_structs_with_brackets;
+mod endian_bytes;
 mod entry;
 mod enum_clike;
 mod enum_variants;
@@ -121,6 +123,7 @@ mod equatable_if_let;
 mod escape;
 mod eta_reduction;
 mod excessive_bools;
+mod excessive_nesting;
 mod exhaustive_items;
 mod exit;
 mod explicit_write;
@@ -266,6 +269,7 @@ mod redundant_field_names;
 mod redundant_pub_crate;
 mod redundant_slicing;
 mod redundant_static_lifetimes;
+mod redundant_type_annotations;
 mod ref_option_ref;
 mod ref_patterns;
 mod reference;
@@ -696,7 +700,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     });
     let too_large_for_stack = conf.too_large_for_stack;
     store.register_late_pass(move |_| Box::new(escape::BoxedLocal { too_large_for_stack }));
-    store.register_late_pass(move |_| Box::new(vec::UselessVec { too_large_for_stack }));
+    store.register_late_pass(move |_| {
+        Box::new(vec::UselessVec {
+            too_large_for_stack,
+            msrv: msrv(),
+        })
+    });
     store.register_late_pass(|_| Box::new(panic_unimplemented::PanicUnimplemented));
     store.register_late_pass(|_| Box::new(strings::StringLitAsBytes));
     store.register_late_pass(|_| Box::new(derive::Derive));
@@ -1005,11 +1014,21 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(tests_outside_test_module::TestsOutsideTestModule));
     store.register_late_pass(|_| Box::new(manual_slice_size_calculation::ManualSliceSizeCalculation));
     store.register_early_pass(|| Box::new(suspicious_doc_comments::SuspiciousDocComments));
+    let excessive_nesting_threshold = conf.excessive_nesting_threshold;
+    store.register_early_pass(move || {
+        Box::new(excessive_nesting::ExcessiveNesting {
+            excessive_nesting_threshold,
+            nodes: rustc_ast::node_id::NodeSet::new(),
+        })
+    });
     store.register_late_pass(|_| Box::new(items_after_test_module::ItemsAfterTestModule));
     store.register_early_pass(|| Box::new(ref_patterns::RefPatterns));
     store.register_late_pass(|_| Box::new(default_constructed_unit_structs::DefaultConstructedUnitStructs));
     store.register_early_pass(|| Box::new(needless_else::NeedlessElse));
     store.register_late_pass(|_| Box::new(missing_fields_in_debug::MissingFieldsInDebug));
+    store.register_late_pass(|_| Box::new(endian_bytes::EndianBytes));
+    store.register_late_pass(|_| Box::new(redundant_type_annotations::RedundantTypeAnnotations));
+    store.register_late_pass(|_| Box::new(arc_with_non_send_sync::ArcWithNonSendSync));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 
