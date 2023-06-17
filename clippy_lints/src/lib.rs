@@ -150,6 +150,7 @@ mod implicit_return;
 mod implicit_saturating_add;
 mod implicit_saturating_sub;
 mod inconsistent_struct_constructor;
+mod incorrect_impls;
 mod index_refutable_slice;
 mod indexing_slicing;
 mod infinite_iter;
@@ -168,6 +169,7 @@ mod large_enum_variant;
 mod large_futures;
 mod large_include_file;
 mod large_stack_arrays;
+mod large_stack_frames;
 mod len_zero;
 mod let_if_seq;
 mod let_underscore;
@@ -197,6 +199,7 @@ mod matches;
 mod mem_forget;
 mod mem_replace;
 mod methods;
+mod min_ident_chars;
 mod minmax;
 mod misc;
 mod misc_early;
@@ -223,6 +226,7 @@ mod needless_borrowed_ref;
 mod needless_continue;
 mod needless_else;
 mod needless_for_each;
+mod needless_if;
 mod needless_late_init;
 mod needless_parens_on_range_literals;
 mod needless_pass_by_value;
@@ -285,6 +289,7 @@ mod shadow;
 mod significant_drop_tightening;
 mod single_char_lifetime_names;
 mod single_component_path_imports;
+mod single_range_in_vec_init;
 mod size_of_in_element_count;
 mod size_of_ref;
 mod slow_vector_initialization;
@@ -490,26 +495,27 @@ pub(crate) struct LintInfo {
     explanation: &'static str,
 }
 
-pub fn explain(name: &str) {
+pub fn explain(name: &str) -> i32 {
     let target = format!("clippy::{}", name.to_ascii_uppercase());
-    match declared_lints::LINTS.iter().find(|info| info.lint.name == target) {
-        Some(info) => {
-            println!("{}", info.explanation);
-            // Check if the lint has configuration
-            let mdconf = get_configuration_metadata();
-            if let Some(config_vec_positions) = mdconf
-                .iter()
-                .find_all(|cconf| cconf.lints.contains(&info.lint.name_lower()[8..].to_owned()))
-            {
-                // If it has, print it
-                println!("### Configuration for {}:\n", info.lint.name_lower());
-                for position in config_vec_positions {
-                    let conf = &mdconf[position];
-                    println!("  - {}: {} (default: {})", conf.name, conf.doc, conf.default);
-                }
+    if let Some(info) = declared_lints::LINTS.iter().find(|info| info.lint.name == target) {
+        println!("{}", info.explanation);
+        // Check if the lint has configuration
+        let mdconf = get_configuration_metadata();
+        if let Some(config_vec_positions) = mdconf
+            .iter()
+            .find_all(|cconf| cconf.lints.contains(&info.lint.name_lower()[8..].to_owned()))
+        {
+            // If it has, print it
+            println!("### Configuration for {}:\n", info.lint.name_lower());
+            for position in config_vec_positions {
+                let conf = &mdconf[position];
+                println!("  - {}: {} (default: {})", conf.name, conf.doc, conf.default);
             }
-        },
-        None => println!("unknown lint: {name}"),
+        }
+        0
+    } else {
+        println!("unknown lint: {name}");
+        1
     }
 }
 
@@ -679,7 +685,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     });
     store.register_late_pass(|_| Box::<shadow::Shadow>::default());
     store.register_late_pass(|_| Box::new(unit_types::UnitTypes));
-    store.register_late_pass(|_| Box::new(loops::Loops));
+    store.register_late_pass(move |_| Box::new(loops::Loops::new(msrv())));
     store.register_late_pass(|_| Box::<main_recursion::MainRecursion>::default());
     store.register_late_pass(|_| Box::new(lifetimes::Lifetimes));
     store.register_late_pass(|_| Box::new(entry::HashMapPass));
@@ -822,10 +828,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         ))
     });
     let enum_variant_name_threshold = conf.enum_variant_name_threshold;
+    let allow_private_module_inception = conf.allow_private_module_inception;
     store.register_late_pass(move |_| {
         Box::new(enum_variants::EnumVariantNames::new(
             enum_variant_name_threshold,
             avoid_breaking_exported_api,
+            allow_private_module_inception,
         ))
     });
     store.register_early_pass(|| Box::new(tabs_in_doc_comments::TabsInDocComments));
@@ -845,7 +853,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(move |_| Box::new(large_stack_arrays::LargeStackArrays::new(array_size_threshold)));
     store.register_late_pass(move |_| Box::new(large_const_arrays::LargeConstArrays::new(array_size_threshold)));
     store.register_late_pass(|_| Box::new(floating_point_arithmetic::FloatingPointArithmetic));
-    store.register_early_pass(|| Box::new(as_conversions::AsConversions));
+    store.register_late_pass(|_| Box::new(as_conversions::AsConversions));
     store.register_late_pass(|_| Box::new(let_underscore::LetUnderscore));
     store.register_early_pass(|| Box::<single_component_path_imports::SingleComponentPathImports>::default());
     let max_fn_params_bools = conf.max_fn_params_bools;
@@ -921,7 +929,12 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
             enable_raw_pointer_heuristic_for_send,
         ))
     });
-    store.register_late_pass(move |_| Box::new(undocumented_unsafe_blocks::UndocumentedUnsafeBlocks));
+    let accept_comment_above_statement = conf.accept_comment_above_statement;
+    store.register_late_pass(move |_| {
+        Box::new(undocumented_unsafe_blocks::UndocumentedUnsafeBlocks::new(
+            accept_comment_above_statement,
+        ))
+    });
     let allow_mixed_uninlined = conf.allow_mixed_uninlined_format_args;
     store.register_late_pass(move |_| Box::new(format_args::FormatArgs::new(msrv(), allow_mixed_uninlined)));
     store.register_late_pass(|_| Box::new(trailing_empty_array::TrailingEmptyArray));
@@ -1029,6 +1042,19 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::new(endian_bytes::EndianBytes));
     store.register_late_pass(|_| Box::new(redundant_type_annotations::RedundantTypeAnnotations));
     store.register_late_pass(|_| Box::new(arc_with_non_send_sync::ArcWithNonSendSync));
+    store.register_late_pass(|_| Box::new(needless_if::NeedlessIf));
+    let allowed_idents_below_min_chars = conf.allowed_idents_below_min_chars.clone();
+    let min_ident_chars_threshold = conf.min_ident_chars_threshold;
+    store.register_late_pass(move |_| {
+        Box::new(min_ident_chars::MinIdentChars {
+            allowed_idents_below_min_chars: allowed_idents_below_min_chars.clone(),
+            min_ident_chars_threshold,
+        })
+    });
+    let stack_size_threshold = conf.stack_size_threshold;
+    store.register_late_pass(move |_| Box::new(large_stack_frames::LargeStackFrames::new(stack_size_threshold)));
+    store.register_late_pass(|_| Box::new(single_range_in_vec_init::SingleRangeInVecInit));
+    store.register_late_pass(|_| Box::new(incorrect_impls::IncorrectImpls));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

@@ -338,6 +338,16 @@ The maximum allowed size for arrays on the stack
 * [`large_const_arrays`](https://rust-lang.github.io/rust-clippy/master/index.html#large_const_arrays)
 
 
+## `stack-size-threshold`
+The maximum allowed stack size for functions in bytes
+
+**Default Value:** `512000` (`u64`)
+
+---
+**Affected lints:**
+* [`large_stack_frames`](https://rust-lang.github.io/rust-clippy/master/index.html#large_stack_frames)
+
+
 ## `vec-box-size-threshold`
 The size of the boxed type in bytes, where boxing in a `Vec` is allowed
 
@@ -651,5 +661,47 @@ The byte size a `T` in `Box<T>` can have, below which it triggers the `clippy::u
 ---
 **Affected lints:**
 * [`unnecessary_box_returns`](https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_box_returns)
+
+
+## `allow-private-module-inception`
+Whether to allow module inception if it's not public.
+
+**Default Value:** `false` (`bool`)
+
+---
+**Affected lints:**
+* [`module_inception`](https://rust-lang.github.io/rust-clippy/master/index.html#module_inception)
+
+
+## `allowed-idents-below-min-chars`
+Allowed names below the minimum allowed characters. The value `".."` can be used as part of
+the list to indicate, that the configured values should be appended to the default
+configuration of Clippy. By default, any configuration will replace the default value.
+
+**Default Value:** `{"j", "z", "i", "y", "n", "x", "w"}` (`rustc_data_structures::fx::FxHashSet<String>`)
+
+---
+**Affected lints:**
+* [`min_ident_chars`](https://rust-lang.github.io/rust-clippy/master/index.html#min_ident_chars)
+
+
+## `min-ident-chars-threshold`
+Minimum chars an ident can have, anything below or equal to this will be linted.
+
+**Default Value:** `1` (`u64`)
+
+---
+**Affected lints:**
+* [`min_ident_chars`](https://rust-lang.github.io/rust-clippy/master/index.html#min_ident_chars)
+
+
+## `accept-comment-above-statement`
+Whether to accept a safety comment to be placed above the statement containing the `unsafe` block
+
+**Default Value:** `false` (`bool`)
+
+---
+**Affected lints:**
+* [`undocumented_unsafe_blocks`](https://rust-lang.github.io/rust-clippy/master/index.html#undocumented_unsafe_blocks)
 
 

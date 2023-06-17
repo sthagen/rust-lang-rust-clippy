@@ -34,6 +34,7 @@ const DEFAULT_DOC_VALID_IDENTS: &[&str] = &[
     "CamelCase",
 ];
 const DEFAULT_DISALLOWED_NAMES: &[&str] = &["foo", "baz", "quux"];
+const DEFAULT_ALLOWED_IDENTS_BELOW_MIN_CHARS: &[&str] = &["i", "j", "x", "y", "z", "w", "n"];
 
 /// Holds information used by `MISSING_ENFORCED_IMPORT_RENAMES` lint.
 #[derive(Clone, Debug, Deserialize)]
@@ -386,6 +387,10 @@ define_Conf! {
     ///
     /// The maximum allowed size for arrays on the stack
     (array_size_threshold: u64 = 512_000),
+    /// Lint: LARGE_STACK_FRAMES.
+    ///
+    /// The maximum allowed stack size for functions in bytes
+    (stack_size_threshold: u64 = 512_000),
     /// Lint: VEC_BOX.
     ///
     /// The size of the boxed type in bytes, where boxing in a `Vec` is allowed
@@ -518,6 +523,25 @@ define_Conf! {
     ///
     /// The byte size a `T` in `Box<T>` can have, below which it triggers the `clippy::unnecessary_box` lint
     (unnecessary_box_size: u64 = 128),
+    /// Lint: MODULE_INCEPTION.
+    ///
+    /// Whether to allow module inception if it's not public.
+    (allow_private_module_inception: bool = false),
+    /// Lint: MIN_IDENT_CHARS.
+    ///
+    /// Allowed names below the minimum allowed characters. The value `".."` can be used as part of
+    /// the list to indicate, that the configured values should be appended to the default
+    /// configuration of Clippy. By default, any configuration will replace the default value.
+    (allowed_idents_below_min_chars: rustc_data_structures::fx::FxHashSet<String> =
+        super::DEFAULT_ALLOWED_IDENTS_BELOW_MIN_CHARS.iter().map(ToString::to_string).collect()),
+    /// Lint: MIN_IDENT_CHARS.
+    ///
+    /// Minimum chars an ident can have, anything below or equal to this will be linted.
+    (min_ident_chars_threshold: u64 = 1),
+    /// Lint: UNDOCUMENTED_UNSAFE_BLOCKS.
+    ///
+    /// Whether to accept a safety comment to be placed above the statement containing the `unsafe` block
+    (accept_comment_above_statement: bool = false),
 }
 
 /// Search for the configuration file.
@@ -585,6 +609,12 @@ pub fn read(sess: &Session, path: &Path) -> TryConf {
         Ok(mut conf) => {
             extend_vec_if_indicator_present(&mut conf.conf.doc_valid_idents, DEFAULT_DOC_VALID_IDENTS);
             extend_vec_if_indicator_present(&mut conf.conf.disallowed_names, DEFAULT_DISALLOWED_NAMES);
+            // TODO: THIS SHOULD BE TESTED, this comment will be gone soon
+            if conf.conf.allowed_idents_below_min_chars.contains(&"..".to_owned()) {
+                conf.conf
+                    .allowed_idents_below_min_chars
+                    .extend(DEFAULT_ALLOWED_IDENTS_BELOW_MIN_CHARS.iter().map(ToString::to_string));
+            }
 
             conf
         },

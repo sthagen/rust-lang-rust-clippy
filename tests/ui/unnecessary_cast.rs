@@ -1,12 +1,16 @@
 //@run-rustfix
+//@aux-build:extern_fake_libc.rs
 #![warn(clippy::unnecessary_cast)]
 #![allow(
-    unused,
     clippy::borrow_as_ptr,
     clippy::no_effect,
     clippy::nonstandard_macro_braces,
-    clippy::unnecessary_operation
+    clippy::unnecessary_operation,
+    nonstandard_style,
+    unused
 )]
+
+extern crate extern_fake_libc;
 
 type PtrConstU8 = *const u8;
 type PtrMutU8 = *mut u8;
@@ -17,6 +21,21 @@ fn owo<T>(ptr: *const T) -> *const T {
 
 fn uwu<T, U>(ptr: *const T) -> *const U {
     ptr as *const U
+}
+
+mod fake_libc {
+    type pid_t = i32;
+    pub unsafe fn getpid() -> pid_t {
+        pid_t::from(0)
+    }
+    // Make sure a where clause does not break it
+    pub fn getpid_SAFE_TRUTH<T: Clone>(t: &T) -> pid_t
+    where
+        T: Clone,
+    {
+        t;
+        unsafe { getpid() }
+    }
 }
 
 #[rustfmt::skip]
@@ -66,12 +85,26 @@ fn main() {
     foo!(b, f32);
     foo!(c, f64);
 
+    // do not lint cast from cfg-dependant type
+    let x = 0 as std::ffi::c_ulong;
+    let y = x as u64;
+    let x: std::ffi::c_ulong = 0;
+    let y = x as u64;
+
     // do not lint cast to cfg-dependant type
-    1 as std::os::raw::c_char;
+    let x = 1 as std::os::raw::c_char;
+    let y = x as u64;
 
     // do not lint cast to alias type
     1 as I32Alias;
     &1 as &I32Alias;
+    // or from
+    let x: I32Alias = 1;
+    let y = x as u64;
+    fake_libc::getpid_SAFE_TRUTH(&0u32) as i32;
+    extern_fake_libc::getpid_SAFE_TRUTH() as i32;
+    let pid = unsafe { fake_libc::getpid() };
+    pid as i32;
 
     let i8_ptr: *const i8 = &1;
     let u8_ptr: *const u8 = &1;

@@ -1,5 +1,5 @@
 #![warn(clippy::missing_panics_doc)]
-#![allow(clippy::option_map_unit_fn)]
+#![allow(clippy::option_map_unit_fn, clippy::unnecessary_literal_unwrap)]
 fn main() {}
 
 /// This needs to be documented
@@ -150,4 +150,36 @@ pub fn debug_assertions() {
     debug_assert!(false);
     debug_assert_eq!(1, 2);
     debug_assert_ne!(1, 2);
+}
+
+// all function must be triggered the lint.
+// `pub` is required, because the lint does not consider unreachable items
+pub mod issue10240 {
+    pub fn option_unwrap<T>(v: &[T]) -> &T {
+        let o: Option<&T> = v.last();
+        o.unwrap()
+    }
+
+    pub fn option_expect<T>(v: &[T]) -> &T {
+        let o: Option<&T> = v.last();
+        o.expect("passed an empty thing")
+    }
+
+    pub fn result_unwrap<T>(v: &[T]) -> &T {
+        let res: Result<&T, &str> = v.last().ok_or("oh noes");
+        res.unwrap()
+    }
+
+    pub fn result_expect<T>(v: &[T]) -> &T {
+        let res: Result<&T, &str> = v.last().ok_or("oh noes");
+        res.expect("passed an empty thing")
+    }
+
+    pub fn last_unwrap(v: &[u32]) -> u32 {
+        *v.last().unwrap()
+    }
+
+    pub fn last_expect(v: &[u32]) -> u32 {
+        *v.last().expect("passed an empty thing")
+    }
 }

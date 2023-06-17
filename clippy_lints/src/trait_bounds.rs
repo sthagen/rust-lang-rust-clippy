@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::{span_lint_and_help, span_lint_and_sugg};
 use clippy_utils::source::{snippet, snippet_opt, snippet_with_applicability};
-use clippy_utils::{SpanlessEq, SpanlessHash};
+use clippy_utils::{is_from_proc_macro, SpanlessEq, SpanlessHash};
 use core::hash::{Hash, Hasher};
 use if_chain::if_chain;
 use itertools::Itertools;
@@ -139,7 +139,7 @@ impl<'tcx> LateLintPass<'tcx> for TraitBounds {
                     ) = cx.tcx.hir().get_if_local(*def_id);
                 then {
                     if self_bounds_map.is_empty() {
-                        for bound in self_bounds.iter() {
+                        for bound in *self_bounds {
                             let Some((self_res, self_segments, _)) = get_trait_info_from_bound(bound) else { continue };
                             self_bounds_map.insert(self_res, self_segments);
                         }
@@ -184,7 +184,7 @@ impl<'tcx> LateLintPass<'tcx> for TraitBounds {
 
                 // Iterate the bounds and add them to our seen hash
                 // If we haven't yet seen it, add it to the fixed traits
-                for bound in bounds.iter() {
+                for bound in bounds {
                     let Some(def_id) = bound.trait_ref.trait_def_id() else { continue; };
 
                     let new_trait = seen_def_ids.insert(def_id);
@@ -260,7 +260,7 @@ impl TraitBounds {
                     SpanlessTy { ty: p.bounded_ty, cx },
                     p.bounds.iter().collect::<Vec<_>>()
                 );
-
+                if !is_from_proc_macro(cx, p.bounded_ty);
                 then {
                     let trait_bounds = v
                         .iter()
@@ -342,7 +342,7 @@ fn check_trait_bound_duplication(cx: &LateContext<'_>, gen: &'_ Generics<'_>) {
                             "this trait bound is already specified in the where clause",
                             None,
                             "consider removing this trait bound",
-                            );
+                        );
                     }
                 }
             }
