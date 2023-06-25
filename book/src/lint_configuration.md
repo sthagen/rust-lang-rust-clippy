@@ -94,6 +94,7 @@ Suppress lints whenever the suggested change would cause breakage for other crat
 * [`linkedlist`](https://rust-lang.github.io/rust-clippy/master/index.html#linkedlist)
 * [`rc_mutex`](https://rust-lang.github.io/rust-clippy/master/index.html#rc_mutex)
 * [`unnecessary_box_returns`](https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_box_returns)
+* [`single_call_fn`](https://rust-lang.github.io/rust-clippy/master/index.html#single_call_fn)
 
 
 ## `msrv`
@@ -146,6 +147,7 @@ The minimum rust version that the project supports
 * [`manual_is_ascii_check`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_is_ascii_check)
 * [`manual_rem_euclid`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_rem_euclid)
 * [`manual_retain`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_retain)
+* [`type_repetition_in_bounds`](https://rust-lang.github.io/rust-clippy/master/index.html#type_repetition_in_bounds)
 
 
 ## `cognitive-complexity-threshold`
@@ -209,7 +211,7 @@ default configuration of Clippy. By default, any configuration will replace the 
 
 Default list:
 
-**Default Value:** `["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "DirectX", "ECMAScript", "GPLv2", "GPLv3", "GitHub", "GitLab", "IPv4", "IPv6", "ClojureScript", "CoffeeScript", "JavaScript", "PureScript", "TypeScript", "NaN", "NaNs", "OAuth", "GraphQL", "OCaml", "OpenGL", "OpenMP", "OpenSSH", "OpenSSL", "OpenStreetMap", "OpenDNS", "WebGL", "TensorFlow", "TrueType", "iOS", "macOS", "FreeBSD", "TeX", "LaTeX", "BibTeX", "BibLaTeX", "MinGW", "CamelCase"]` (`Vec<String>`)
+**Default Value:** `["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "DirectX", "ECMAScript", "GPLv2", "GPLv3", "GitHub", "GitLab", "IPv4", "IPv6", "ClojureScript", "CoffeeScript", "JavaScript", "PureScript", "TypeScript", "WebAssembly", "NaN", "NaNs", "OAuth", "GraphQL", "OCaml", "OpenGL", "OpenMP", "OpenSSH", "OpenSSL", "OpenStreetMap", "OpenDNS", "WebGL", "TensorFlow", "TrueType", "iOS", "macOS", "FreeBSD", "TeX", "LaTeX", "BibTeX", "BibLaTeX", "MinGW", "CamelCase"]` (`Vec<String>`)
 
 ---
 **Affected lints:**
@@ -697,6 +699,16 @@ Minimum chars an ident can have, anything below or equal to this will be linted.
 
 ## `accept-comment-above-statement`
 Whether to accept a safety comment to be placed above the statement containing the `unsafe` block
+
+**Default Value:** `false` (`bool`)
+
+---
+**Affected lints:**
+* [`undocumented_unsafe_blocks`](https://rust-lang.github.io/rust-clippy/master/index.html#undocumented_unsafe_blocks)
+
+
+## `accept-comment-above-attributes`
+Whether to accept a safety comment to be placed above the attributes for the `unsafe` block
 
 **Default Value:** `false` (`bool`)
 
