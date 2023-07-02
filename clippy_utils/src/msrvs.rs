@@ -19,6 +19,8 @@ macro_rules! msrv_aliases {
 
 // names may refer to stabilized feature flags or library items
 msrv_aliases! {
+    1,71,0 { TUPLE_ARRAY_CONVERSIONS }
+    1,70,0 { OPTION_IS_SOME_AND }
     1,68,0 { PATH_MAIN_SEPARATOR_STR }
     1,65,0 { LET_ELSE, POINTER_CAST_CONSTNESS }
     1,62,0 { BOOL_THEN_SOME, DEFAULT_ENUM_ATTRIBUTE }
@@ -42,6 +44,7 @@ msrv_aliases! {
     1,34,0 { TRY_FROM }
     1,30,0 { ITERATOR_FIND_MAP, TOOL_ATTRIBUTES }
     1,28,0 { FROM_BOOL }
+    1,27,0 { ITERATOR_TRY_FOLD }
     1,26,0 { RANGE_INCLUSIVE, STRING_RETAIN }
     1,24,0 { IS_ASCII_DIGIT }
     1,18,0 { HASH_MAP_RETAIN, HASH_SET_RETAIN }

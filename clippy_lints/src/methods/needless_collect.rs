@@ -16,7 +16,7 @@ use rustc_hir::{
 };
 use rustc_lint::LateContext;
 use rustc_middle::hir::nested_filter;
-use rustc_middle::ty::{self, AssocKind, Clause, EarlyBinder, GenericArg, GenericArgKind, PredicateKind, Ty};
+use rustc_middle::ty::{self, AssocKind, ClauseKind, EarlyBinder, GenericArg, GenericArgKind, Ty};
 use rustc_span::symbol::Ident;
 use rustc_span::{sym, Span, Symbol};
 
@@ -175,7 +175,7 @@ fn check_collect_into_intoiterator<'tcx>(
                 .caller_bounds()
                 .into_iter()
                 .filter_map(|p| {
-                    if let PredicateKind::Clause(Clause::Trait(t)) = p.kind().skip_binder()
+                    if let ClauseKind::Trait(t) = p.kind().skip_binder()
                             && cx.tcx.is_diagnostic_item(sym::IntoIterator,t.trait_ref.def_id) {
                                 Some(t.self_ty())
                             } else {
@@ -322,7 +322,7 @@ impl<'tcx> Visitor<'tcx> for IterFunctionVisitor<'_, 'tcx> {
 
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         // Check function calls on our collection
-        if let ExprKind::MethodCall(method_name, recv, [args @ ..], _) = &expr.kind {
+        if let ExprKind::MethodCall(method_name, recv, args, _) = &expr.kind {
             if method_name.ident.name == sym!(collect) && is_trait_method(self.cx, expr, sym::Iterator) {
                 self.current_mutably_captured_ids = get_captured_ids(self.cx, self.cx.typeck_results().expr_ty(recv));
                 self.visit_expr(recv);

@@ -188,6 +188,7 @@ mod manual_is_ascii_check;
 mod manual_let_else;
 mod manual_main_separator_str;
 mod manual_non_exhaustive;
+mod manual_range_patterns;
 mod manual_rem_euclid;
 mod manual_retain;
 mod manual_slice_size_calculation;
@@ -262,6 +263,7 @@ mod pub_use;
 mod question_mark;
 mod question_mark_used;
 mod ranges;
+mod raw_strings;
 mod rc_clone_in_vec_init;
 mod read_zero_byte_vec;
 mod redundant_async_block;
@@ -309,6 +311,7 @@ mod to_digit_is_some;
 mod trailing_empty_array;
 mod trait_bounds;
 mod transmute;
+mod tuple_array_conversions;
 mod types;
 mod undocumented_unsafe_blocks;
 mod unicode;
@@ -336,6 +339,7 @@ mod use_self;
 mod useless_conversion;
 mod vec;
 mod vec_init_then_push;
+mod visibility;
 mod wildcard_imports;
 mod write;
 mod zero_div_zero;
@@ -768,7 +772,7 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     store.register_late_pass(|_| Box::<useless_conversion::UselessConversion>::default());
     store.register_late_pass(|_| Box::new(implicit_hasher::ImplicitHasher));
     store.register_late_pass(|_| Box::new(fallible_impl_from::FallibleImplFrom));
-    store.register_late_pass(|_| Box::new(question_mark::QuestionMark));
+    store.register_late_pass(|_| Box::<question_mark::QuestionMark>::default());
     store.register_late_pass(|_| Box::new(question_mark_used::QuestionMarkUsed));
     store.register_early_pass(|| Box::new(suspicious_operation_groupings::SuspiciousOperationGroupings));
     store.register_late_pass(|_| Box::new(suspicious_trait_impl::SuspiciousImpl));
@@ -1061,6 +1065,15 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
             def_id_to_usage: rustc_data_structures::fx::FxHashMap::default(),
         })
     });
+    let needless_raw_string_hashes_allow_one = conf.allow_one_hash_in_raw_strings;
+    store.register_early_pass(move || {
+        Box::new(raw_strings::RawStrings {
+            needless_raw_string_hashes_allow_one,
+        })
+    });
+    store.register_late_pass(|_| Box::new(manual_range_patterns::ManualRangePatterns));
+    store.register_early_pass(|| Box::new(visibility::Visibility));
+    store.register_late_pass(move |_| Box::new(tuple_array_conversions::TupleArrayConversions { msrv: msrv() }));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

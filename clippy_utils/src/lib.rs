@@ -327,6 +327,18 @@ pub fn is_trait_method(cx: &LateContext<'_>, expr: &Expr<'_>, diag_item: Symbol)
         .map_or(false, |did| is_diag_trait_item(cx, did, diag_item))
 }
 
+/// Checks if the `def_id` belongs to a function that is part of a trait impl.
+pub fn is_def_id_trait_method(cx: &LateContext<'_>, def_id: LocalDefId) -> bool {
+    if let Some(hir_id) = cx.tcx.opt_local_def_id_to_hir_id(def_id)
+        && let Node::Item(item) = cx.tcx.hir().get_parent(hir_id)
+        && let ItemKind::Impl(imp) = item.kind
+    {
+        imp.of_trait.is_some()
+    } else {
+        false
+    }
+}
+
 /// Checks if the given expression is a path referring an item on the trait
 /// that is marked with the given diagnostic item.
 ///
@@ -2397,7 +2409,7 @@ fn with_test_item_names(tcx: TyCtxt<'_>, module: LocalDefId, f: impl Fn(&[Symbol
 
 /// Checks if the function containing the given `HirId` is a `#[test]` function
 ///
-/// Note: Add `// compile-flags: --test` to UI tests with a `#[test]` function
+/// Note: Add `//@compile-flags: --test` to UI tests with a `#[test]` function
 pub fn is_in_test_function(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
     with_test_item_names(tcx, tcx.parent_module(id), |names| {
         tcx.hir()
@@ -2419,7 +2431,7 @@ pub fn is_in_test_function(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
 
 /// Checks if the item containing the given `HirId` has `#[cfg(test)]` attribute applied
 ///
-/// Note: Add `// compile-flags: --test` to UI tests with a `#[cfg(test)]` function
+/// Note: Add `//@compile-flags: --test` to UI tests with a `#[cfg(test)]` function
 pub fn is_in_cfg_test(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
     fn is_cfg_test(attr: &Attribute) -> bool {
         if attr.has_name(sym::cfg)
@@ -2441,7 +2453,7 @@ pub fn is_in_cfg_test(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
 /// Checks whether item either has `test` attribute applied, or
 /// is a module with `test` in its name.
 ///
-/// Note: Add `// compile-flags: --test` to UI tests with a `#[test]` function
+/// Note: Add `//@compile-flags: --test` to UI tests with a `#[test]` function
 pub fn is_test_module_or_function(tcx: TyCtxt<'_>, item: &Item<'_>) -> bool {
     is_in_test_function(tcx, item.hir_id())
         || matches!(item.kind, ItemKind::Mod(..))

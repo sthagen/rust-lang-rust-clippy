@@ -108,6 +108,7 @@ The minimum rust version that the project supports
 * [`manual_str_repeat`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_str_repeat)
 * [`cloned_instead_of_copied`](https://rust-lang.github.io/rust-clippy/master/index.html#cloned_instead_of_copied)
 * [`redundant_field_names`](https://rust-lang.github.io/rust-clippy/master/index.html#redundant_field_names)
+* [`option_map_unwrap_or`](https://rust-lang.github.io/rust-clippy/master/index.html#option_map_unwrap_or)
 * [`redundant_static_lifetimes`](https://rust-lang.github.io/rust-clippy/master/index.html#redundant_static_lifetimes)
 * [`filter_map_next`](https://rust-lang.github.io/rust-clippy/master/index.html#filter_map_next)
 * [`checked_conversions`](https://rust-lang.github.io/rust-clippy/master/index.html#checked_conversions)
@@ -148,6 +149,8 @@ The minimum rust version that the project supports
 * [`manual_rem_euclid`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_rem_euclid)
 * [`manual_retain`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_retain)
 * [`type_repetition_in_bounds`](https://rust-lang.github.io/rust-clippy/master/index.html#type_repetition_in_bounds)
+* [`tuple_array_conversions`](https://rust-lang.github.io/rust-clippy/master/index.html#tuple_array_conversions)
+* [`manual_try_fold`](https://rust-lang.github.io/rust-clippy/master/index.html#manual_try_fold)
 
 
 ## `cognitive-complexity-threshold`
@@ -715,5 +718,15 @@ Whether to accept a safety comment to be placed above the attributes for the `un
 ---
 **Affected lints:**
 * [`undocumented_unsafe_blocks`](https://rust-lang.github.io/rust-clippy/master/index.html#undocumented_unsafe_blocks)
+
+
+## `allow-one-hash-in-raw-strings`
+Whether to allow `r#""#` when `r""` can be used
+
+**Default Value:** `false` (`bool`)
+
+---
+**Affected lints:**
+* [`unnecessary_raw_string_hashes`](https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_raw_string_hashes)
 
 
