@@ -4019,7 +4019,7 @@ impl Methods {
                     }
                     unnecessary_literal_unwrap::check(cx, expr, recv, name, args);
                 },
-                ("unwrap_or_default", []) => {
+                ("unwrap_or_default" | "unwrap_unchecked" | "unwrap_err_unchecked", []) => {
                     unnecessary_literal_unwrap::check(cx, expr, recv, name, args);
                 }
                 ("unwrap_or_else", [u_arg]) => {
@@ -4204,7 +4204,7 @@ impl SelfKind {
             };
 
             let Some(trait_def_id) = cx.tcx.get_diagnostic_item(trait_sym) else {
-                return false
+                return false;
             };
             implements_trait(cx, ty, trait_def_id, &[parent_ty.into()])
         }

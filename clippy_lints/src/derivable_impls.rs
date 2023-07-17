@@ -3,13 +3,12 @@ use clippy_utils::msrvs::{self, Msrv};
 use clippy_utils::source::indent_of;
 use clippy_utils::{is_default_equivalent, peel_blocks};
 use rustc_errors::Applicability;
+use rustc_hir::def::{CtorKind, CtorOf, DefKind, Res};
 use rustc_hir::{
-    self as hir,
-    def::{CtorKind, CtorOf, DefKind, Res},
-    Body, Expr, ExprKind, GenericArg, Impl, ImplItemKind, Item, ItemKind, Node, PathSegment, QPath, TyKind,
+    self as hir, Body, Expr, ExprKind, GenericArg, Impl, ImplItemKind, Item, ItemKind, Node, PathSegment, QPath, TyKind,
 };
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_middle::ty::adjustment::{Adjust, PointerCast};
+use rustc_middle::ty::adjustment::{Adjust, PointerCoercion};
 use rustc_middle::ty::{self, Adt, AdtDef, SubstsRef, Ty, TypeckResults};
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::sym;
@@ -116,7 +115,7 @@ fn check_struct<'tcx>(
     let is_default_without_adjusts = |expr| {
         is_default_equivalent(cx, expr)
             && typeck_results.expr_adjustments(expr).iter().all(|adj| {
-                !matches!(adj.kind, Adjust::Pointer(PointerCast::Unsize)
+                !matches!(adj.kind, Adjust::Pointer(PointerCoercion::Unsize)
                     if contains_trait_object(adj.target))
             })
     };

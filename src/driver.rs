@@ -130,6 +130,13 @@ impl rustc_driver::Callbacks for ClippyCallbacks {
         config.parse_sess_created = Some(Box::new(move |parse_sess| {
             track_clippy_args(parse_sess, &clippy_args_var);
             track_files(parse_sess);
+
+            // Trigger a rebuild if CLIPPY_CONF_DIR changes. The value must be a valid string so
+            // changes between dirs that are invalid UTF-8 will not trigger rebuilds
+            parse_sess.env_depinfo.get_mut().insert((
+                Symbol::intern("CLIPPY_CONF_DIR"),
+                env::var("CLIPPY_CONF_DIR").ok().map(|dir| Symbol::intern(&dir)),
+            ));
         }));
         config.register_lints = Some(Box::new(move |sess, lint_store| {
             // technically we're ~guaranteed that this is none but might as well call anything that
@@ -185,7 +192,7 @@ You can use tool lints to allow or deny lints from your code, eg.:
     );
 }
 
-const BUG_REPORT_URL: &str = "https://github.com/rust-lang/rust-clippy/issues/new";
+const BUG_REPORT_URL: &str = "https://github.com/rust-lang/rust-clippy/issues/new?template=ice.yml";
 
 #[allow(clippy::too_many_lines)]
 pub fn main() {
