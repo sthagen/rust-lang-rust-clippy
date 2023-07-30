@@ -21,6 +21,7 @@ mod expect_used;
 mod extend_with_drain;
 mod filetype_is_file;
 mod filter_map;
+mod filter_map_bool_then;
 mod filter_map_identity;
 mod filter_map_next;
 mod filter_next;
@@ -75,6 +76,7 @@ mod or_then_unwrap;
 mod path_buf_push_overwrite;
 mod range_zip_with_len;
 mod read_line_without_trim;
+mod readonly_write_lock;
 mod repeat_once;
 mod search_is_some;
 mod seek_from_current;
@@ -103,7 +105,6 @@ mod unnecessary_lazy_eval;
 mod unnecessary_literal_unwrap;
 mod unnecessary_sort_by;
 mod unnecessary_to_owned;
-mod unwrap_or_else_default;
 mod unwrap_used;
 mod useless_asref;
 mod utils;
@@ -476,29 +477,40 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
-    /// Checks for usage of `_.unwrap_or_else(Default::default)` on `Option` and
-    /// `Result` values.
+    /// Checks for usages of the following functions with an argument that constructs a default value
+    /// (e.g., `Default::default` or `String::new`):
+    /// - `unwrap_or`
+    /// - `unwrap_or_else`
+    /// - `or_insert`
+    /// - `or_insert_with`
     ///
     /// ### Why is this bad?
-    /// Readability, these can be written as `_.unwrap_or_default`, which is
-    /// simpler and more concise.
+    /// Readability. Using `unwrap_or_default` in place of `unwrap_or`/`unwrap_or_else`, or `or_default`
+    /// in place of `or_insert`/`or_insert_with`, is simpler and more concise.
+    ///
+    /// ### Known problems
+    /// In some cases, the argument of `unwrap_or`, etc. is needed for type inference. The lint uses a
+    /// heuristic to try to identify such cases. However, the heuristic can produce false negatives.
     ///
     /// ### Examples
     /// ```rust
     /// # let x = Some(1);
-    /// x.unwrap_or_else(Default::default);
-    /// x.unwrap_or_else(u32::default);
+    /// # let mut map = std::collections::HashMap::<u64, String>::new();
+    /// x.unwrap_or(Default::default());
+    /// map.entry(42).or_insert_with(String::new);
     /// ```
     ///
     /// Use instead:
     /// ```rust
     /// # let x = Some(1);
+    /// # let mut map = std::collections::HashMap::<u64, String>::new();
     /// x.unwrap_or_default();
+    /// map.entry(42).or_default();
     /// ```
     #[clippy::version = "1.56.0"]
-    pub UNWRAP_OR_ELSE_DEFAULT,
+    pub UNWRAP_OR_DEFAULT,
     style,
-    "using `.unwrap_or_else(Default::default)`, which is more succinctly expressed as `.unwrap_or_default()`"
+    "using `.unwrap_or`, etc. with an argument that constructs a default value"
 }
 
 declare_clippy_lint! {
@@ -3465,6 +3477,68 @@ declare_clippy_lint! {
     "disallows `.skip(0)`"
 }
 
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for usage of `bool::then` in `Iterator::filter_map`.
+    ///
+    /// ### Why is this bad?
+    /// This can be written with `filter` then `map` instead, which would reduce nesting and
+    /// separates the filtering from the transformation phase. This comes with no cost to
+    /// performance and is just cleaner.
+    ///
+    /// ### Limitations
+    /// Does not lint `bool::then_some`, as it eagerly evaluates its arguments rather than lazily.
+    /// This can create differing behavior, so better safe than sorry.
+    ///
+    /// ### Example
+    /// ```rust
+    /// # fn really_expensive_fn(i: i32) -> i32 { i }
+    /// # let v = vec![];
+    /// _ = v.into_iter().filter_map(|i| (i % 2 == 0).then(|| really_expensive_fn(i)));
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// # fn really_expensive_fn(i: i32) -> i32 { i }
+    /// # let v = vec![];
+    /// _ = v.into_iter().filter(|i| i % 2 == 0).map(|i| really_expensive_fn(i));
+    /// ```
+    #[clippy::version = "1.72.0"]
+    pub FILTER_MAP_BOOL_THEN,
+    style,
+    "checks for usage of `bool::then` in `Iterator::filter_map`"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
+    /// Looks for calls to `RwLock::write` where the lock is only used for reading.
+    ///
+    /// ### Why is this bad?
+    /// The write portion of `RwLock` is exclusive, meaning that no other thread
+    /// can access the lock while this writer is active.
+    ///
+    /// ### Example
+    /// ```rust
+    /// use std::sync::RwLock;
+    /// fn assert_is_zero(lock: &RwLock<i32>) {
+    ///     let num = lock.write().unwrap();
+    ///     assert_eq!(*num, 0);
+    /// }
+    /// ```
+    ///
+    /// Use instead:
+    /// ```rust
+    /// use std::sync::RwLock;
+    /// fn assert_is_zero(lock: &RwLock<i32>) {
+    ///     let num = lock.read().unwrap();
+    ///     assert_eq!(*num, 0);
+    /// }
+    /// ```
+    #[clippy::version = "1.73.0"]
+    pub READONLY_WRITE_LOCK,
+    nursery,
+    "acquiring a write lock when a read lock would work"
+}
+
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Msrv,
@@ -3495,7 +3569,7 @@ impl_lint_pass!(Methods => [
     SHOULD_IMPLEMENT_TRAIT,
     WRONG_SELF_CONVENTION,
     OK_EXPECT,
-    UNWRAP_OR_ELSE_DEFAULT,
+    UNWRAP_OR_DEFAULT,
     MAP_UNWRAP_OR,
     RESULT_MAP_OR_INTO_OPTION,
     OPTION_MAP_OR_NONE,
@@ -3602,6 +3676,8 @@ impl_lint_pass!(Methods => [
     FORMAT_COLLECT,
     STRING_LIT_CHARS_ANY,
     ITER_SKIP_ZERO,
+    FILTER_MAP_BOOL_THEN,
+    READONLY_WRITE_LOCK
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -3662,11 +3738,11 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
         let name = impl_item.ident.name.as_str();
         let parent = cx.tcx.hir().get_parent_item(impl_item.hir_id()).def_id;
         let item = cx.tcx.hir().expect_item(parent);
-        let self_ty = cx.tcx.type_of(item.owner_id).subst_identity();
+        let self_ty = cx.tcx.type_of(item.owner_id).instantiate_identity();
 
         let implements_trait = matches!(item.kind, hir::ItemKind::Impl(hir::Impl { of_trait: Some(_), .. }));
         if let hir::ImplItemKind::Fn(ref sig, id) = impl_item.kind {
-            let method_sig = cx.tcx.fn_sig(impl_item.owner_id).subst_identity();
+            let method_sig = cx.tcx.fn_sig(impl_item.owner_id).instantiate_identity();
             let method_sig = cx.tcx.erase_late_bound_regions(method_sig);
             let first_arg_ty_opt = method_sig.inputs().iter().next().copied();
             // if this impl block implements a trait, lint in trait definition instead
@@ -3756,8 +3832,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
             then {
                 let first_arg_span = first_arg_ty.span;
                 let first_arg_ty = hir_ty_to_ty(cx.tcx, first_arg_ty);
-                let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id())
-                    .self_ty();
+                let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id()).self_ty();
                 wrong_self_convention::check(
                     cx,
                     item.ident.name.as_str(),
@@ -3774,8 +3849,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
             if item.ident.name == sym::new;
             if let TraitItemKind::Fn(_, _) = item.kind;
             let ret_ty = return_ty(cx, item.owner_id);
-            let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id())
-                .self_ty();
+            let self_ty = TraitRef::identity(cx.tcx, item.owner_id.to_def_id()).self_ty();
             if !ret_ty.contains(self_ty);
 
             then {
@@ -3881,6 +3955,7 @@ impl Methods {
                 },
                 ("filter_map", [arg]) => {
                     unnecessary_filter_map::check(cx, expr, arg, name);
+                    filter_map_bool_then::check(cx, expr, arg, call_span);
                     filter_map_identity::check(cx, expr, arg, span);
                 },
                 ("find_map", [arg]) => {
@@ -4134,7 +4209,6 @@ impl Methods {
                         Some(("map", recv, [map_arg], _, _))
                             if map_unwrap_or::check(cx, expr, recv, map_arg, u_arg, &self.msrv) => {},
                         _ => {
-                            unwrap_or_else_default::check(cx, expr, recv, u_arg);
                             unnecessary_lazy_eval::check(cx, expr, recv, u_arg, "unwrap_or");
                         },
                     }
@@ -4147,6 +4221,9 @@ impl Methods {
                         range_zip_with_len::check(cx, expr, iter_recv, arg);
                     }
                 },
+                ("write", []) => {
+                    readonly_write_lock::check(cx, expr, recv);
+                }
                 _ => {},
             }
         }
@@ -4290,8 +4367,8 @@ impl SelfKind {
             } else if ty.is_box() {
                 ty.boxed_ty() == parent_ty
             } else if is_type_diagnostic_item(cx, ty, sym::Rc) || is_type_diagnostic_item(cx, ty, sym::Arc) {
-                if let ty::Adt(_, substs) = ty.kind() {
-                    substs.types().next().map_or(false, |t| t == parent_ty)
+                if let ty::Adt(_, args) = ty.kind() {
+                    args.types().next().map_or(false, |t| t == parent_ty)
                 } else {
                     false
                 }

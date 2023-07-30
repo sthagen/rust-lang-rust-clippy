@@ -4844,6 +4844,7 @@ Released 2018-09-13
 [`field_reassign_with_default`]: https://rust-lang.github.io/rust-clippy/master/index.html#field_reassign_with_default
 [`filetype_is_file`]: https://rust-lang.github.io/rust-clippy/master/index.html#filetype_is_file
 [`filter_map`]: https://rust-lang.github.io/rust-clippy/master/index.html#filter_map
+[`filter_map_bool_then`]: https://rust-lang.github.io/rust-clippy/master/index.html#filter_map_bool_then
 [`filter_map_identity`]: https://rust-lang.github.io/rust-clippy/master/index.html#filter_map_identity
 [`filter_map_next`]: https://rust-lang.github.io/rust-clippy/master/index.html#filter_map_next
 [`filter_next`]: https://rust-lang.github.io/rust-clippy/master/index.html#filter_next
@@ -5097,6 +5098,7 @@ Released 2018-09-13
 [`needless_raw_string_hashes`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_raw_string_hashes
 [`needless_raw_strings`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_raw_strings
 [`needless_return`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_return
+[`needless_return_with_question_mark`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_return_with_question_mark
 [`needless_splitn`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_splitn
 [`needless_update`]: https://rust-lang.github.io/rust-clippy/master/index.html#needless_update
 [`neg_cmp_op_on_partial_ord`]: https://rust-lang.github.io/rust-clippy/master/index.html#neg_cmp_op_on_partial_ord
@@ -5179,6 +5181,7 @@ Released 2018-09-13
 [`rc_mutex`]: https://rust-lang.github.io/rust-clippy/master/index.html#rc_mutex
 [`read_line_without_trim`]: https://rust-lang.github.io/rust-clippy/master/index.html#read_line_without_trim
 [`read_zero_byte_vec`]: https://rust-lang.github.io/rust-clippy/master/index.html#read_zero_byte_vec
+[`readonly_write_lock`]: https://rust-lang.github.io/rust-clippy/master/index.html#readonly_write_lock
 [`recursive_format_impl`]: https://rust-lang.github.io/rust-clippy/master/index.html#recursive_format_impl
 [`redundant_allocation`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_allocation
 [`redundant_async_block`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_async_block
@@ -5370,6 +5373,7 @@ Released 2018-09-13
 [`unused_unit`]: https://rust-lang.github.io/rust-clippy/master/index.html#unused_unit
 [`unusual_byte_groupings`]: https://rust-lang.github.io/rust-clippy/master/index.html#unusual_byte_groupings
 [`unwrap_in_result`]: https://rust-lang.github.io/rust-clippy/master/index.html#unwrap_in_result
+[`unwrap_or_default`]: https://rust-lang.github.io/rust-clippy/master/index.html#unwrap_or_default
 [`unwrap_or_else_default`]: https://rust-lang.github.io/rust-clippy/master/index.html#unwrap_or_else_default
 [`unwrap_used`]: https://rust-lang.github.io/rust-clippy/master/index.html#unwrap_used
 [`upper_case_acronyms`]: https://rust-lang.github.io/rust-clippy/master/index.html#upper_case_acronyms

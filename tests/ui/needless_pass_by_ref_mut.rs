@@ -1,9 +1,10 @@
-#![allow(unused)]
+#![allow(clippy::if_same_then_else, clippy::no_effect)]
+#![feature(lint_reasons)]
 
 use std::ptr::NonNull;
 
-// Should only warn for `s`.
 fn foo(s: &mut Vec<u32>, b: &u32, x: &mut u32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     *x += *b + s.len() as u32;
 }
 
@@ -27,8 +28,8 @@ fn foo5(s: &mut Vec<u32>) {
     foo2(s);
 }
 
-// Should warn.
 fn foo6(s: &mut Vec<u32>) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     non_mut_ref(s);
 }
 
@@ -40,13 +41,13 @@ impl Bar {
     // Should not warn on `&mut self`.
     fn bar(&mut self) {}
 
-    // Should warn about `vec`
     fn mushroom(&self, vec: &mut Vec<i32>) -> usize {
+        //~^ ERROR: this argument is a mutable reference, but not used mutably
         vec.len()
     }
 
-    // Should warn about `vec` (and not `self`).
     fn badger(&mut self, vec: &mut Vec<i32>) -> usize {
+        //~^ ERROR: this argument is a mutable reference, but not used mutably
         vec.len()
     }
 }
@@ -122,48 +123,93 @@ async fn f7(x: &mut i32, y: i32, z: &mut i32, a: i32) {
     *z += 1;
 }
 
-// Should warn.
 async fn a1(x: &mut i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a2(x: &mut i32, y: String) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a3(x: &mut i32, y: String, z: String) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a4(x: &mut i32, y: i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a5(x: i32, y: &mut i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a6(x: i32, y: &mut i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", x);
 }
-// Should warn.
 async fn a7(x: i32, y: i32, z: &mut i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", z);
 }
-// Should warn.
 async fn a8(x: i32, a: &mut i32, y: i32, z: &mut i32) {
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
     println!("{:?}", z);
 }
 
+// Should not warn (passed as closure which takes `&mut`).
+fn passed_as_closure(s: &mut u32) {}
+
+// Should not warn.
+fn passed_as_local(s: &mut u32) {}
+
+// Should not warn.
+fn ty_unify_1(s: &mut u32) {}
+
+// Should not warn.
+fn ty_unify_2(s: &mut u32) {}
+
+// Should not warn.
+fn passed_as_field(s: &mut u32) {}
+
+fn closure_takes_mut(s: fn(&mut u32)) {}
+
+struct A {
+    s: fn(&mut u32),
+}
+
+// Should warn.
+fn used_as_path(s: &mut u32) {}
+
+// Make sure lint attributes work fine
+#[expect(clippy::needless_pass_by_ref_mut)]
+fn lint_attr(s: &mut u32) {}
+
+#[cfg(not(feature = "a"))]
+fn cfg_warn(s: &mut u32) {}
+//~^ ERROR: this argument is a mutable reference, but not used mutably
+//~| NOTE: this is cfg-gated and may require further changes
+
+#[cfg(not(feature = "a"))]
+mod foo {
+    fn cfg_warn(s: &mut u32) {}
+    //~^ ERROR: this argument is a mutable reference, but not used mutably
+    //~| NOTE: this is cfg-gated and may require further changes
+}
+
 fn main() {
-    // let mut u = 0;
-    // let mut v = vec![0];
-    // foo(&mut v, &0, &mut u);
-    // foo2(&mut v);
-    // foo3(&mut v);
-    // foo4(&mut v);
-    // foo5(&mut v);
-    // alias_check(&mut v);
-    // alias_check2(&mut v);
-    // println!("{u}");
+    let mut u = 0;
+    let mut v = vec![0];
+    foo(&mut v, &0, &mut u);
+    foo2(&mut v);
+    foo3(&mut v);
+    foo4(&mut v);
+    foo5(&mut v);
+    alias_check(&mut v);
+    alias_check2(&mut v);
+    println!("{u}");
+    closure_takes_mut(passed_as_closure);
+    A { s: passed_as_field };
+    used_as_path;
+    let _: fn(&mut u32) = passed_as_local;
+    let _ = if v[0] == 0 { ty_unify_1 } else { ty_unify_2 };
 }

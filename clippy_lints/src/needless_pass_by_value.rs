@@ -2,7 +2,7 @@ use clippy_utils::diagnostics::{multispan_sugg, span_lint_and_then};
 use clippy_utils::ptr::get_spans;
 use clippy_utils::source::{snippet, snippet_opt};
 use clippy_utils::ty::{
-    implements_trait, implements_trait_with_env, is_copy, is_type_diagnostic_item, is_type_lang_item,
+    implements_trait, implements_trait_with_env_from_iter, is_copy, is_type_diagnostic_item, is_type_lang_item,
 };
 use clippy_utils::{get_trait_def_id, is_self, paths};
 use if_chain::if_chain;
@@ -140,7 +140,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessPassByValue {
             ctx
         };
 
-        let fn_sig = cx.tcx.fn_sig(fn_def_id).subst_identity();
+        let fn_sig = cx.tcx.fn_sig(fn_def_id).instantiate_identity();
         let fn_sig = cx.tcx.liberate_late_bound_regions(fn_def_id.to_def_id(), fn_sig);
 
         for (idx, ((input, &ty), arg)) in decl.inputs.iter().zip(fn_sig.inputs()).zip(body.params).enumerate() {
@@ -170,7 +170,7 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessPassByValue {
                     !preds.is_empty() && {
                         let ty_empty_region = Ty::new_imm_ref(cx.tcx, cx.tcx.lifetimes.re_erased, ty);
                         preds.iter().all(|t| {
-                            let ty_params = t.trait_ref.substs.iter().skip(1).collect::<Vec<_>>();
+                            let ty_params = t.trait_ref.args.iter().skip(1).collect::<Vec<_>>();
                             implements_trait(cx, ty_empty_region, t.def_id(), &ty_params)
                         })
                     },
@@ -182,7 +182,13 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessPassByValue {
                 if !ty.is_mutable_ptr();
                 if !is_copy(cx, ty);
                 if ty.is_sized(cx.tcx, cx.param_env);
-                if !allowed_traits.iter().any(|&t| implements_trait_with_env(cx.tcx, cx.param_env, ty, t, [None]));
+                if !allowed_traits.iter().any(|&t| implements_trait_with_env_from_iter(
+                    cx.tcx,
+                    cx.param_env,
+                    ty,
+                    t,
+                    [Option::<ty::GenericArg<'tcx>>::None],
+                ));
                 if !implements_borrow_trait;
                 if !all_borrowable_trait;
 
