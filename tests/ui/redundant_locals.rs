@@ -1,4 +1,4 @@
-//@aux-build:proc_macros.rs:proc-macro
+//@aux-build:proc_macros.rs
 #![allow(unused, clippy::no_effect, clippy::needless_pass_by_ref_mut)]
 #![warn(clippy::redundant_locals)]
 
@@ -25,6 +25,15 @@ fn upgraded_mutability() {
 fn downgraded_mutability() {
     let mut x = 1;
     let x = x;
+}
+
+// see #11290
+fn shadow_mutation() {
+    let mut x = 1;
+    {
+        let mut x = x;
+        x = 2;
+    }
 }
 
 fn coercion(par: &mut i32) {

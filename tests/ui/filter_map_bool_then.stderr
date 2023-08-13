@@ -30,5 +30,11 @@ error: usage of `bool::then` in `filter_map`
 LL |         .filter_map(|i| (i.clone() % 2 == 0).then(|| i + 1));
    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use `filter` then `map` instead: `filter(|&i| (i.clone() % 2 == 0)).map(|i| i + 1)`
 
-error: aborting due to 5 previous errors
+error: usage of `bool::then` in `filter_map`
+  --> $DIR/filter_map_bool_then.rs:37:22
+   |
+LL |     v.clone().iter().filter_map(|i| (i == &NonCopy).then(|| i));
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use `filter` then `map` instead: `filter(|&i| (i == &NonCopy)).map(|i| i)`
+
+error: aborting due to 6 previous errors
 
