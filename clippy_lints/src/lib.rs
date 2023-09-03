@@ -152,6 +152,7 @@ mod implicit_hasher;
 mod implicit_return;
 mod implicit_saturating_add;
 mod implicit_saturating_sub;
+mod implied_bounds_in_impls;
 mod inconsistent_struct_constructor;
 mod incorrect_impls;
 mod index_refutable_slice;
@@ -209,6 +210,7 @@ mod misc;
 mod misc_early;
 mod mismatching_type_param_order;
 mod missing_assert_message;
+mod missing_asserts_for_indexing;
 mod missing_const_for_fn;
 mod missing_doc;
 mod missing_enforced_import_rename;
@@ -285,6 +287,7 @@ mod ref_option_ref;
 mod ref_patterns;
 mod reference;
 mod regex;
+mod reserve_after_initialization;
 mod return_self_not_must_use;
 mod returns;
 mod same_name_method;
@@ -693,7 +696,8 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     });
     store.register_late_pass(|_| Box::<shadow::Shadow>::default());
     store.register_late_pass(|_| Box::new(unit_types::UnitTypes));
-    store.register_late_pass(move |_| Box::new(loops::Loops::new(msrv())));
+    let enforce_iter_loop_reborrow = conf.enforce_iter_loop_reborrow;
+    store.register_late_pass(move |_| Box::new(loops::Loops::new(msrv(), enforce_iter_loop_reborrow)));
     store.register_late_pass(|_| Box::<main_recursion::MainRecursion>::default());
     store.register_late_pass(|_| Box::new(lifetimes::Lifetimes));
     store.register_late_pass(|_| Box::new(entry::HashMapPass));
@@ -1095,6 +1099,9 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
     });
     store.register_late_pass(|_| Box::new(redundant_locals::RedundantLocals));
     store.register_late_pass(|_| Box::new(ignored_unit_patterns::IgnoredUnitPatterns));
+    store.register_late_pass(|_| Box::<reserve_after_initialization::ReserveAfterInitialization>::default());
+    store.register_late_pass(|_| Box::new(implied_bounds_in_impls::ImpliedBoundsInImpls));
+    store.register_late_pass(|_| Box::new(missing_asserts_for_indexing::MissingAssertsForIndexing));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
 

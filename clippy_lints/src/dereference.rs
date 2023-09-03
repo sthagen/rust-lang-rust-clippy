@@ -609,12 +609,14 @@ impl<'tcx> LateLintPass<'tcx> for Dereferencing<'tcx> {
                             adjusted_ty,
                         },
                     ));
-                } else if stability.is_deref_stable() {
+                } else if stability.is_deref_stable()
+                    && let Some(parent) = get_parent_expr(cx, expr)
+                {
                     self.state = Some((
                         State::ExplicitDeref { mutability: None },
                         StateData {
-                            span: expr.span,
-                            hir_id: expr.hir_id,
+                            span: parent.span,
+                            hir_id: parent.hir_id,
                             adjusted_ty,
                         },
                     ));
@@ -802,7 +804,8 @@ fn in_postfix_position<'tcx>(cx: &LateContext<'tcx>, e: &'tcx Expr<'tcx>) -> boo
         match parent.kind {
             ExprKind::Call(child, _) | ExprKind::MethodCall(_, child, _, _) | ExprKind::Index(child, _, _)
                 if child.hir_id == e.hir_id => true,
-            ExprKind::Field(_, _) | ExprKind::Match(_, _, MatchSource::TryDesugar | MatchSource::AwaitDesugar) => true,
+            ExprKind::Match(.., MatchSource::TryDesugar(_) | MatchSource::AwaitDesugar)
+                | ExprKind::Field(_, _) => true,
             _ => false,
         }
     } else {

@@ -5,6 +5,7 @@
 #![feature(lint_reasons)]
 #![feature(never_type)]
 #![feature(rustc_private)]
+#![feature(assert_matches)]
 #![recursion_limit = "512"]
 #![cfg_attr(feature = "deny-warnings", deny(warnings))]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::must_use_candidate)]
@@ -83,7 +84,7 @@ use rustc_ast::Attribute;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::unhash::UnhashMap;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{CrateNum, DefId, LocalDefId, LOCAL_CRATE};
+use rustc_hir::def_id::{CrateNum, DefId, LocalDefId, LocalModDefId, LOCAL_CRATE};
 use rustc_hir::hir_id::{HirIdMap, HirIdSet};
 use rustc_hir::intravisit::{walk_expr, FnKind, Visitor};
 use rustc_hir::LangItem::{OptionNone, OptionSome, ResultErr, ResultOk};
@@ -110,6 +111,7 @@ use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::{kw, Ident, Symbol};
 use rustc_span::{sym, Span};
 use rustc_target::abi::Integer;
+use visitors::Visitable;
 
 use crate::consts::{constant, miri_to_const, Constant};
 use crate::higher::Range;
@@ -1286,7 +1288,7 @@ pub fn contains_name<'tcx>(name: Symbol, expr: &'tcx Expr<'_>, cx: &LateContext<
 }
 
 /// Returns `true` if `expr` contains a return expression
-pub fn contains_return(expr: &hir::Expr<'_>) -> bool {
+pub fn contains_return<'tcx>(expr: impl Visitable<'tcx>) -> bool {
     for_each_expr(expr, |e| {
         if matches!(e.kind, hir::ExprKind::Ret(..)) {
             ControlFlow::Break(())
@@ -1765,7 +1767,7 @@ pub fn is_try<'tcx>(cx: &LateContext<'_>, expr: &'tcx Expr<'tcx>) -> Option<&'tc
 
     if let ExprKind::Match(_, arms, ref source) = expr.kind {
         // desugared from a `?` operator
-        if *source == MatchSource::TryDesugar {
+        if let MatchSource::TryDesugar(_) = *source {
             return Some(expr);
         }
 
@@ -2370,11 +2372,11 @@ pub fn is_hir_ty_cfg_dependant(cx: &LateContext<'_>, ty: &hir::Ty<'_>) -> bool {
     false
 }
 
-static TEST_ITEM_NAMES_CACHE: OnceLock<Mutex<FxHashMap<LocalDefId, Vec<Symbol>>>> = OnceLock::new();
+static TEST_ITEM_NAMES_CACHE: OnceLock<Mutex<FxHashMap<LocalModDefId, Vec<Symbol>>>> = OnceLock::new();
 
-fn with_test_item_names(tcx: TyCtxt<'_>, module: LocalDefId, f: impl Fn(&[Symbol]) -> bool) -> bool {
+fn with_test_item_names(tcx: TyCtxt<'_>, module: LocalModDefId, f: impl Fn(&[Symbol]) -> bool) -> bool {
     let cache = TEST_ITEM_NAMES_CACHE.get_or_init(|| Mutex::new(FxHashMap::default()));
-    let mut map: MutexGuard<'_, FxHashMap<LocalDefId, Vec<Symbol>>> = cache.lock().unwrap();
+    let mut map: MutexGuard<'_, FxHashMap<LocalModDefId, Vec<Symbol>>> = cache.lock().unwrap();
     let value = map.entry(module);
     match value {
         Entry::Occupied(entry) => f(entry.get()),
