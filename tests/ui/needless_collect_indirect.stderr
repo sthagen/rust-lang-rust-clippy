@@ -8,6 +8,7 @@ LL |     indirect_iter.into_iter().map(|x| (x, x + 1)).collect::<HashMap<_, _>>(
    |     ------------------------- the iterator could be used here instead
    |
    = note: `-D clippy::needless-collect` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::needless_collect)]`
 help: use the original Iterator instead of collecting it and then producing a new one
    |
 LL ~     
@@ -230,12 +231,11 @@ help: take the original Iterator's count instead of collecting it and finding th
 LL ~         
 LL |
 LL |         // Do lint
-LL |         #[allow(clippy::never_loop)]
 LL ~         for _ in 0..v.iter().count() {
    |
 
 error: avoid using `collect()` when not needed
-  --> $DIR/needless_collect_indirect.rs:285:30
+  --> $DIR/needless_collect_indirect.rs:283:30
    |
 LL |         let mut w = v.iter().collect::<Vec<_>>();
    |                              ^^^^^^^
@@ -248,12 +248,11 @@ help: take the original Iterator's count instead of collecting it and finding th
 LL ~         
 LL |
 LL |         // Do lint
-LL |         #[allow(clippy::never_loop)]
 LL ~         while 1 == v.iter().count() {
    |
 
 error: avoid using `collect()` when not needed
-  --> $DIR/needless_collect_indirect.rs:310:30
+  --> $DIR/needless_collect_indirect.rs:306:30
    |
 LL |         let mut w = v.iter().collect::<Vec<_>>();
    |                              ^^^^^^^
@@ -266,7 +265,6 @@ help: take the original Iterator's count instead of collecting it and finding th
 LL ~         
 LL |
 LL |         // Do lint
-LL |         #[allow(clippy::never_loop)]
 LL ~         while let Some(i) = Some(v.iter().count()) {
    |
 
