@@ -2032,38 +2032,59 @@ pub fn is_must_use_func_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// * `|x| return x`
 /// * `|x| { return x }`
 /// * `|x| { return x; }`
+/// * `|(x, y)| (x, y)`
 ///
 /// Consider calling [`is_expr_untyped_identity_function`] or [`is_expr_identity_function`] instead.
 fn is_body_identity_function(cx: &LateContext<'_>, func: &Body<'_>) -> bool {
-    let id = if_chain! {
-        if let [param] = func.params;
-        if let PatKind::Binding(_, id, _, _) = param.pat.kind;
-        then {
-            id
-        } else {
-            return false;
+    fn check_pat(cx: &LateContext<'_>, pat: &Pat<'_>, expr: &Expr<'_>) -> bool {
+        match (pat.kind, expr.kind) {
+            (PatKind::Binding(_, id, _, _), _) => {
+                path_to_local_id(expr, id) && cx.typeck_results().expr_adjustments(expr).is_empty()
+            },
+            (PatKind::Tuple(pats, dotdot), ExprKind::Tup(tup))
+                if dotdot.as_opt_usize().is_none() && pats.len() == tup.len() =>
+            {
+                pats.iter().zip(tup).all(|(pat, expr)| check_pat(cx, pat, expr))
+            },
+            _ => false,
         }
+    }
+
+    let [param] = func.params else {
+        return false;
     };
 
     let mut expr = func.value;
     loop {
         match expr.kind {
-            #[rustfmt::skip]
-                ExprKind::Block(&Block { stmts: [], expr: Some(e), .. }, _, )
-                | ExprKind::Ret(Some(e)) => expr = e,
-            #[rustfmt::skip]
-                ExprKind::Block(&Block { stmts: [stmt], expr: None, .. }, _) => {
-                    if_chain! {
-                        if let StmtKind::Semi(e) | StmtKind::Expr(e) = stmt.kind;
-                        if let ExprKind::Ret(Some(ret_val)) = e.kind;
-                        then {
-                            expr = ret_val;
-                        } else {
-                            return false;
-                        }
-                    }
+            ExprKind::Block(
+                &Block {
+                    stmts: [],
+                    expr: Some(e),
+                    ..
                 },
-            _ => return path_to_local_id(expr, id) && cx.typeck_results().expr_adjustments(expr).is_empty(),
+                _,
+            )
+            | ExprKind::Ret(Some(e)) => expr = e,
+            ExprKind::Block(
+                &Block {
+                    stmts: [stmt],
+                    expr: None,
+                    ..
+                },
+                _,
+            ) => {
+                if_chain! {
+                    if let StmtKind::Semi(e) | StmtKind::Expr(e) = stmt.kind;
+                    if let ExprKind::Ret(Some(ret_val)) = e.kind;
+                    then {
+                        expr = ret_val;
+                    } else {
+                        return false;
+                    }
+                }
+            },
+            _ => return check_pat(cx, param.pat, expr),
         }
     }
 }
@@ -2081,9 +2102,8 @@ pub fn is_expr_untyped_identity_function(cx: &LateContext<'_>, expr: &Expr<'_>) 
         },
         ExprKind::Path(QPath::Resolved(_, path))
             if path.segments.iter().all(|seg| seg.infer_args)
-                && let Some(did) = path.res.opt_def_id() =>
-        {
-            match_def_path(cx, did, &paths::CONVERT_IDENTITY)
+                && let Some(did) = path.res.opt_def_id() => {
+            cx.tcx.is_diagnostic_item(sym::convert_identity, did)
         },
         _ => false,
     }
@@ -2100,7 +2120,7 @@ pub fn is_expr_untyped_identity_function(cx: &LateContext<'_>, expr: &Expr<'_>) 
 pub fn is_expr_identity_function(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     match expr.kind {
         ExprKind::Closure(&Closure { body, .. }) => is_body_identity_function(cx, cx.tcx.hir().body(body)),
-        _ => path_def_id(cx, expr).map_or(false, |id| match_def_path(cx, id, &paths::CONVERT_IDENTITY)),
+        _ => path_def_id(cx, expr).map_or(false, |id| cx.tcx.is_diagnostic_item(sym::convert_identity, id)),
     }
 }
 
