@@ -18,9 +18,8 @@ use rustc_lint::{EarlyContext, EarlyLintPass, LateContext, LateLintPass, Level, 
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty;
 use rustc_session::{declare_lint_pass, declare_tool_lint, impl_lint_pass};
-use rustc_span::source_map::Span;
 use rustc_span::symbol::Symbol;
-use rustc_span::{sym, DUMMY_SP};
+use rustc_span::{sym, Span, DUMMY_SP};
 use semver::Version;
 
 static UNIX_SYSTEMS: &[&str] = &[
@@ -406,20 +405,26 @@ declare_clippy_lint! {
     /// Checks for `#[cfg(features = "...")]` and suggests to replace it with
     /// `#[cfg(feature = "...")]`.
     ///
+    /// It also checks if `cfg(test)` was misspelled.
+    ///
     /// ### Why is this bad?
-    /// Misspelling `feature` as `features` can be sometimes hard to spot. It
+    /// Misspelling `feature` as `features` or `test` as `tests` can be sometimes hard to spot. It
     /// may cause conditional compilation not work quietly.
     ///
     /// ### Example
     /// ```no_run
     /// #[cfg(features = "some-feature")]
     /// fn conditional() { }
+    /// #[cfg(tests)]
+    /// mod tests { }
     /// ```
     ///
     /// Use instead:
     /// ```no_run
     /// #[cfg(feature = "some-feature")]
     /// fn conditional() { }
+    /// #[cfg(test)]
+    /// mod tests { }
     /// ```
     #[clippy::version = "1.69.0"]
     pub MAYBE_MISUSED_CFG,
@@ -939,6 +944,19 @@ fn check_nested_misused_cfg(cx: &EarlyContext<'_>, items: &[NestedMetaItem]) {
             }
             if let MetaItemKind::List(list) = &meta.kind {
                 check_nested_misused_cfg(cx, list);
+            // If this is not a list, then we check for `cfg(test)`.
+            } else if let Some(ident) = meta.ident()
+                && matches!(ident.name.as_str(), "tests" | "Test")
+            {
+                span_lint_and_sugg(
+                    cx,
+                    MAYBE_MISUSED_CFG,
+                    meta.span,
+                    &format!("'test' may be misspelled as '{}'", ident.name.as_str()),
+                    "do you mean",
+                    "test".to_string(),
+                    Applicability::MaybeIncorrect,
+                );
             }
         }
     }
