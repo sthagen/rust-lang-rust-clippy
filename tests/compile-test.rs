@@ -5,7 +5,7 @@
 #![allow(unused_extern_crates)]
 
 use ui_test::spanned::Spanned;
-use ui_test::{status_emitter, Args, CommandBuilder, Config, Match, Mode};
+use ui_test::{status_emitter, Args, CommandBuilder, Config, Match, Mode, OutputConflictHandling};
 
 use std::collections::BTreeMap;
 use std::env::{self, set_var, var_os};
@@ -113,6 +113,7 @@ fn base_config(test_dir: &str) -> (Config, Args) {
 
     let target_dir = PathBuf::from(var_os("CARGO_TARGET_DIR").unwrap_or_else(|| "target".into()));
     let mut config = Config {
+        output_conflict_handling: OutputConflictHandling::Error,
         filter_files: env::var("TESTNAME")
             .map(|filters| filters.split(',').map(str::to_string).collect())
             .unwrap_or_default(),
@@ -126,7 +127,6 @@ fn base_config(test_dir: &str) -> (Config, Args) {
     }))
     .into();
     config.comment_defaults.base().diagnostic_code_prefix = Some(Spanned::dummy("clippy::".into())).into();
-    config.filter(&format!("tests/{test_dir}"), "$$DIR");
     config.with_args(&args);
     let current_exe_path = env::current_exe().unwrap();
     let deps_path = current_exe_path.parent().unwrap();
