@@ -564,6 +564,7 @@ impl<'tcx> LateLintPass<'tcx> for Attributes {
                                             || is_word(lint, sym::deprecated)
                                             || is_word(lint, sym!(unreachable_pub))
                                             || is_word(lint, sym!(unused))
+                                            || is_word(lint, sym!(unused_import_braces))
                                             || extract_clippy_lint(lint).map_or(false, |s| {
                                                 matches!(
                                                     s.as_str(),
@@ -1000,9 +1001,7 @@ fn check_clippy_cfg_attr(
 ) {
     if cfg_attr.has_name(sym::clippy)
         && let Some(ident) = behind_cfg_attr.ident()
-        // FIXME: replace with `from_symbol` once https://github.com/rust-lang/rust/pull/121230
-        // is merged.
-        && Level::from_str(ident.name.as_str()).is_some()
+        && Level::from_symbol(ident.name, Some(attr.id)).is_some()
         && let Some(items) = behind_cfg_attr.meta_item_list()
     {
         let nb_items = items.len();
