@@ -1,4 +1,6 @@
 //@no-rustfix: overlapping suggestions
+//@compile-flags: -Zdeduplicate-diagnostics=yes
+
 #![feature(lint_reasons)]
 #![allow(
     unused,
@@ -172,4 +174,9 @@ fn issue_5794() {
     if true != !b {} //~ ERROR: this boolean expression can be simplified
     if !b == !c {} //~ ERROR: this boolean expression can be simplified
     if !b != !c {} //~ ERROR: this boolean expression can be simplified
+}
+
+fn issue_12371(x: usize) -> bool {
+    // Should not warn!
+    !x != 0
 }
