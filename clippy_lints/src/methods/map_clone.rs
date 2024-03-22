@@ -50,7 +50,7 @@ pub(super) fn check(cx: &LateContext<'_>, e: &hir::Expr<'_>, recv: &hir::Expr<'_
                 let closure_body = cx.tcx.hir().body(body);
                 let closure_expr = peel_blocks(closure_body.value);
                 match closure_body.params[0].pat.kind {
-                    hir::PatKind::Ref(inner, hir::Mutability::Not) => {
+                    hir::PatKind::Ref(inner, Mutability::Not) => {
                         if let hir::PatKind::Binding(hir::BindingAnnotation::NONE, .., name, None) = inner.kind {
                             if ident_eq(name, closure_expr) {
                                 lint_explicit_closure(cx, e.span, recv.span, true, msrv);
@@ -124,6 +124,11 @@ fn handle_path(
             && let ty::Ref(_, ty, Mutability::Not) = ty.kind()
             && let ty::FnDef(_, lst) = cx.typeck_results().expr_ty(arg).kind()
             && lst.iter().all(|l| l.as_type() == Some(*ty))
+            && !matches!(
+                ty.ty_adt_def()
+                    .and_then(|adt_def| cx.tcx.get_diagnostic_name(adt_def.did())),
+                Some(sym::Arc | sym::ArcWeak | sym::Rc | sym::RcWeak)
+            )
         {
             lint_path(cx, e.span, recv.span, is_copy(cx, ty.peel_refs()));
         }

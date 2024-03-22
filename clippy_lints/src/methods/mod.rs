@@ -231,8 +231,12 @@ declare_clippy_lint! {
     /// used instead.
     ///
     /// ### Why is this bad?
-    /// When applicable, `filter_map()` is more clear since it shows that
-    /// `Option` is used to produce 0 or 1 items.
+    /// `filter_map()` is known to always produce 0 or 1 output items per input item,
+    /// rather than however many the inner iterator type produces.
+    /// Therefore, it maintains the upper bound in `Iterator::size_hint()`,
+    /// and communicates to the reader that the input items are not being expanded into
+    /// multiple output items without their having to notice that the mapping function
+    /// returns an `Option`.
     ///
     /// ### Example
     /// ```no_run
@@ -4236,8 +4240,8 @@ impl_lint_pass!(Methods => [
 
 /// Extracts a method call name, args, and `Span` of the method name.
 pub fn method_call<'tcx>(
-    recv: &'tcx hir::Expr<'tcx>,
-) -> Option<(&'tcx str, &'tcx hir::Expr<'tcx>, &'tcx [hir::Expr<'tcx>], Span, Span)> {
+    recv: &'tcx Expr<'tcx>,
+) -> Option<(&'tcx str, &'tcx Expr<'tcx>, &'tcx [Expr<'tcx>], Span, Span)> {
     if let ExprKind::MethodCall(path, receiver, args, call_span) = recv.kind {
         if !args.iter().any(|e| e.span.from_expansion()) && !receiver.span.from_expansion() {
             let name = path.ident.name.as_str();
@@ -4248,7 +4252,7 @@ pub fn method_call<'tcx>(
 }
 
 impl<'tcx> LateLintPass<'tcx> for Methods {
-    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>) {
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
         if expr.span.from_expansion() {
             return;
         }
@@ -4256,12 +4260,12 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
         self.check_methods(cx, expr);
 
         match expr.kind {
-            hir::ExprKind::Call(func, args) => {
+            ExprKind::Call(func, args) => {
                 from_iter_instead_of_collect::check(cx, expr, args, func);
                 unnecessary_fallible_conversions::check_function(cx, expr, func);
                 manual_c_str_literals::check(cx, expr, func, args, &self.msrv);
             },
-            hir::ExprKind::MethodCall(method_call, receiver, args, _) => {
+            ExprKind::MethodCall(method_call, receiver, args, _) => {
                 let method_span = method_call.ident.span;
                 or_fun_call::check(cx, expr, method_span, method_call.ident.as_str(), receiver, args);
                 expect_fun_call::check(cx, expr, method_span, method_call.ident.as_str(), receiver, args);
@@ -4273,7 +4277,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
                 single_char_pattern::check(cx, expr, method_call.ident.name, receiver, args);
                 unnecessary_to_owned::check(cx, expr, method_call.ident.name, receiver, args, &self.msrv);
             },
-            hir::ExprKind::Binary(op, lhs, rhs) if op.node == hir::BinOpKind::Eq || op.node == hir::BinOpKind::Ne => {
+            ExprKind::Binary(op, lhs, rhs) if op.node == hir::BinOpKind::Eq || op.node == hir::BinOpKind::Ne => {
                 let mut info = BinaryExprInfo {
                     expr,
                     chain: lhs,
@@ -4995,9 +4999,9 @@ fn check_is_some_is_none(cx: &LateContext<'_>, expr: &Expr<'_>, recv: &Expr<'_>,
 /// Used for `lint_binary_expr_with_method_call`.
 #[derive(Copy, Clone)]
 struct BinaryExprInfo<'a> {
-    expr: &'a hir::Expr<'a>,
-    chain: &'a hir::Expr<'a>,
-    other: &'a hir::Expr<'a>,
+    expr: &'a Expr<'a>,
+    chain: &'a Expr<'a>,
+    other: &'a Expr<'a>,
     eq: bool,
 }
 
