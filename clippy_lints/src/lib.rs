@@ -8,6 +8,7 @@
 #![feature(never_type)]
 #![feature(rustc_private)]
 #![feature(stmt_expr_attributes)]
+#![feature(unwrap_infallible)]
 #![recursion_limit = "512"]
 #![cfg_attr(feature = "deny-warnings", deny(warnings))]
 #![allow(
@@ -532,6 +533,7 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
         allow_expect_in_tests,
         allow_mixed_uninlined_format_args,
         allow_one_hash_in_raw_strings,
+        allow_panic_in_tests,
         allow_print_in_tests,
         allow_private_module_inception,
         allow_unwrap_in_tests,
@@ -769,7 +771,7 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
             allow_in_test: allow_useless_vec_in_tests,
         })
     });
-    store.register_late_pass(|_| Box::new(panic_unimplemented::PanicUnimplemented));
+    store.register_late_pass(move |_| Box::new(panic_unimplemented::PanicUnimplemented { allow_panic_in_tests }));
     store.register_late_pass(|_| Box::new(strings::StringLitAsBytes));
     store.register_late_pass(|_| Box::new(derive::Derive));
     store.register_late_pass(move |_| Box::new(derivable_impls::DerivableImpls::new(msrv())));
