@@ -5254,6 +5254,7 @@ Released 2018-09-13
 [`cast_sign_loss`]: https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
 [`cast_slice_different_sizes`]: https://rust-lang.github.io/rust-clippy/master/index.html#cast_slice_different_sizes
 [`cast_slice_from_raw_parts`]: https://rust-lang.github.io/rust-clippy/master/index.html#cast_slice_from_raw_parts
+[`cfg_not_test`]: https://rust-lang.github.io/rust-clippy/master/index.html#cfg_not_test
 [`char_lit_as_u8`]: https://rust-lang.github.io/rust-clippy/master/index.html#char_lit_as_u8
 [`chars_last_cmp`]: https://rust-lang.github.io/rust-clippy/master/index.html#chars_last_cmp
 [`chars_next_cmp`]: https://rust-lang.github.io/rust-clippy/master/index.html#chars_next_cmp
@@ -5589,6 +5590,7 @@ Released 2018-09-13
 [`missing_assert_message`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_assert_message
 [`missing_asserts_for_indexing`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_asserts_for_indexing
 [`missing_const_for_fn`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn
+[`missing_const_for_thread_local`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_thread_local
 [`missing_docs_in_private_items`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_docs_in_private_items
 [`missing_enforced_import_renames`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_enforced_import_renames
 [`missing_errors_doc`]: https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
