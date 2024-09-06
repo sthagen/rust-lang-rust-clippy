@@ -203,6 +203,7 @@ mod manual_assert;
 mod manual_async_fn;
 mod manual_bits;
 mod manual_clamp;
+mod manual_div_ceil;
 mod manual_float_methods;
 mod manual_hash_one;
 mod manual_is_ascii_check;
@@ -634,8 +635,7 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
     let format_args = format_args_storage.clone();
     store.register_late_pass(move |_| Box::new(methods::Methods::new(conf, format_args.clone())));
     store.register_late_pass(move |_| Box::new(matches::Matches::new(conf)));
-    store.register_early_pass(move || Box::new(manual_non_exhaustive::ManualNonExhaustiveStruct::new(conf)));
-    store.register_late_pass(move |_| Box::new(manual_non_exhaustive::ManualNonExhaustiveEnum::new(conf)));
+    store.register_late_pass(move |_| Box::new(manual_non_exhaustive::ManualNonExhaustive::new(conf)));
     store.register_late_pass(move |_| Box::new(manual_strip::ManualStrip::new(conf)));
     store.register_early_pass(move || Box::new(redundant_static_lifetimes::RedundantStaticLifetimes::new(conf)));
     store.register_early_pass(move || Box::new(redundant_field_names::RedundantFieldNames::new(conf)));
@@ -937,5 +937,6 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
     store.register_early_pass(|| Box::new(cfg_not_test::CfgNotTest));
     store.register_late_pass(|_| Box::new(zombie_processes::ZombieProcesses));
     store.register_late_pass(|_| Box::new(pointers_in_nomem_asm_block::PointersInNomemAsmBlock));
+    store.register_late_pass(move |_| Box::new(manual_div_ceil::ManualDivCeil::new(conf)));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
