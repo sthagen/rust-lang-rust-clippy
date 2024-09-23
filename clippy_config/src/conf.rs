@@ -1,6 +1,6 @@
+use crate::ClippyConfiguration;
 use crate::msrvs::Msrv;
 use crate::types::{DisallowedPath, MacroMatcher, MatchLintBehaviour, PubUnderscoreFieldsBehaviour, Rename};
-use crate::ClippyConfiguration;
 use rustc_errors::Applicability;
 use rustc_session::Session;
 use rustc_span::edit_distance::edit_distance;
@@ -563,6 +563,7 @@ define_Conf! {
         uninlined_format_args,
         unnecessary_lazy_evaluations,
         unnested_or_patterns,
+        unused_trait_names,
         use_self,
     )]
     msrv: Msrv = Msrv::empty(),
