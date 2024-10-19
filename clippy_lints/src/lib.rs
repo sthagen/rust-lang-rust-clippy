@@ -2,7 +2,6 @@
 #![feature(binary_heap_into_iter_sorted)]
 #![feature(box_patterns)]
 #![feature(macro_metavar_expr_concat)]
-#![feature(control_flow_enum)]
 #![feature(f128)]
 #![feature(f16)]
 #![feature(if_let_guard)]
@@ -28,8 +27,6 @@
     unused_qualifications,
     rustc::internal
 )]
-// Disable this rustc lint for now, as it was also done in rustc
-#![allow(rustc::potential_query_instability)]
 
 // FIXME: switch to something more ergonomic here, once available.
 // (Currently there is no way to opt into sysroot crates without `extern crate`.)
@@ -606,6 +603,7 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
         store.register_late_pass(|_| {
             Box::new(utils::internal_lints::almost_standard_lint_formulation::AlmostStandardFormulation::new())
         });
+        store.register_late_pass(|_| Box::new(utils::internal_lints::slow_symbol_comparisons::SlowSymbolComparisons));
     }
 
     store.register_late_pass(move |_| Box::new(operators::arithmetic_side_effects::ArithmeticSideEffects::new(conf)));

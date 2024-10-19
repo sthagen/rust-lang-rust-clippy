@@ -1,6 +1,6 @@
 [package]
 name = "clippy"
-version = "0.1.83"
+version = "0.1.84"
 description = "A bunch of helpful lints to avoid common pitfalls in Rust"
 repository = "https://github.com/rust-lang/rust-clippy"
 readme = "README.md"
@@ -39,7 +39,7 @@ toml = "0.7.3"
 walkdir = "2.3"
 filetime = "0.2.9"
 itertools = "0.12"
-pulldown-cmark = "0.11"
+pulldown-cmark = { version = "0.11", default-features = false, features = ["html"] }
 rinja = { version = "0.3", default-features = false, features = ["config"] }
 
 # UI test dependencies
