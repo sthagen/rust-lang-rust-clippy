@@ -60,6 +60,7 @@ mod manual_ok_or;
 mod manual_saturating_arithmetic;
 mod manual_str_repeat;
 mod manual_try_fold;
+mod map_all_any_identity;
 mod map_clone;
 mod map_collect_result_unit;
 mod map_err_ignore;
@@ -67,6 +68,7 @@ mod map_flatten;
 mod map_identity;
 mod map_unwrap_or;
 mod mut_mutex_lock;
+mod needless_as_bytes;
 mod needless_character_iteration;
 mod needless_collect;
 mod needless_option_as_deref;
@@ -4166,6 +4168,56 @@ declare_clippy_lint! {
     "calling `.first().is_some()` or `.first().is_none()` instead of `.is_empty()`"
 }
 
+declare_clippy_lint! {
+   /// ### What it does
+   /// It detects useless calls to `str::as_bytes()` before calling `len()` or `is_empty()`.
+   ///
+   /// ### Why is this bad?
+   /// The `len()` and `is_empty()` methods are also directly available on strings, and they
+   /// return identical results. In particular, `len()` on a string returns the number of
+   /// bytes.
+   ///
+   /// ### Example
+   /// ```
+   /// let len = "some string".as_bytes().len();
+   /// let b = "some string".as_bytes().is_empty();
+   /// ```
+   /// Use instead:
+   /// ```
+   /// let len = "some string".len();
+   /// let b = "some string".is_empty();
+   /// ```
+   #[clippy::version = "1.84.0"]
+   pub NEEDLESS_AS_BYTES,
+   complexity,
+   "detect useless calls to `as_bytes()`"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for usage of `.map(…)`, followed by `.all(identity)` or `.any(identity)`.
+    ///
+    /// ### Why is this bad?
+    /// The `.all(…)` or `.any(…)` methods can be called directly in place of `.map(…)`.
+    ///
+    /// ### Example
+    /// ```
+    /// # let mut v = [""];
+    /// let e1 = v.iter().map(|s| s.is_empty()).all(|a| a);
+    /// let e2 = v.iter().map(|s| s.is_empty()).any(std::convert::identity);
+    /// ```
+    /// Use instead:
+    /// ```
+    /// # let mut v = [""];
+    /// let e1 = v.iter().all(|s| s.is_empty());
+    /// let e2 = v.iter().any(|s| s.is_empty());
+    /// ```
+    #[clippy::version = "1.84.0"]
+    pub MAP_ALL_ANY_IDENTITY,
+    complexity,
+    "combine `.map(_)` followed by `.all(identity)`/`.any(identity)` into a single call"
+}
+
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Msrv,
@@ -4327,6 +4379,8 @@ impl_lint_pass!(Methods => [
     NEEDLESS_CHARACTER_ITERATION,
     MANUAL_INSPECT,
     UNNECESSARY_MIN_OR_MAX,
+    NEEDLESS_AS_BYTES,
+    MAP_ALL_ANY_IDENTITY,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -4534,15 +4588,21 @@ impl Methods {
                 ("all", [arg]) => {
                     unused_enumerate_index::check(cx, expr, recv, arg);
                     needless_character_iteration::check(cx, expr, recv, arg, true);
-                    if let Some(("cloned", recv2, [], _, _)) = method_call(recv) {
-                        iter_overeager_cloned::check(
-                            cx,
-                            expr,
-                            recv,
-                            recv2,
-                            iter_overeager_cloned::Op::NeedlessMove(arg),
-                            false,
-                        );
+                    match method_call(recv) {
+                        Some(("cloned", recv2, [], _, _)) => {
+                            iter_overeager_cloned::check(
+                                cx,
+                                expr,
+                                recv,
+                                recv2,
+                                iter_overeager_cloned::Op::NeedlessMove(arg),
+                                false,
+                            );
+                        },
+                        Some(("map", _, [map_arg], _, map_call_span)) => {
+                            map_all_any_identity::check(cx, expr, recv, map_call_span, map_arg, call_span, arg, "all");
+                        },
+                        _ => {},
                     }
                 },
                 ("and_then", [arg]) => {
@@ -4570,6 +4630,9 @@ impl Methods {
                                 && let [param] = body.params =>
                         {
                             string_lit_chars_any::check(cx, expr, recv, param, peel_blocks(body.value), &self.msrv);
+                        },
+                        Some(("map", _, [map_arg], _, map_call_span)) => {
+                            map_all_any_identity::check(cx, expr, recv, map_call_span, map_arg, call_span, arg, "any");
                         },
                         _ => {},
                     }
@@ -4764,8 +4827,14 @@ impl Methods {
                     unit_hash::check(cx, expr, recv, arg);
                 },
                 ("is_empty", []) => {
-                    if let Some(("as_str", recv, [], as_str_span, _)) = method_call(recv) {
-                        redundant_as_str::check(cx, expr, recv, as_str_span, span);
+                    match method_call(recv) {
+                        Some(("as_bytes", prev_recv, [], _, _)) => {
+                            needless_as_bytes::check(cx, "is_empty", recv, prev_recv, expr.span);
+                        },
+                        Some(("as_str", recv, [], as_str_span, _)) => {
+                            redundant_as_str::check(cx, expr, recv, as_str_span, span);
+                        },
+                        _ => {},
                     }
                     is_empty::check(cx, expr, recv);
                 },
@@ -4793,6 +4862,11 @@ impl Methods {
                             iter_overeager_cloned::Op::LaterCloned,
                             false,
                         );
+                    }
+                },
+                ("len", []) => {
+                    if let Some(("as_bytes", prev_recv, [], _, _)) = method_call(recv) {
+                        needless_as_bytes::check(cx, "len", recv, prev_recv, expr.span);
                     }
                 },
                 ("lock", []) => {
