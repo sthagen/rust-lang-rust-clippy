@@ -10,6 +10,7 @@ use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Expr, FnDecl, LangItem, TyKind};
+use rustc_hir_analysis::lower_ty;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_lint::LateContext;
 use rustc_middle::mir::ConstValue;
@@ -35,6 +36,19 @@ use crate::{def_path_def_ids, match_def_path, path_res};
 
 mod type_certainty;
 pub use type_certainty::expr_type_is_certain;
+
+/// Lower a [`hir::Ty`] to a [`rustc_middle::Ty`].
+pub fn ty_from_hir_ty<'tcx>(cx: &LateContext<'tcx>, hir_ty: &hir::Ty<'tcx>) -> Ty<'tcx> {
+    cx.maybe_typeck_results()
+        .and_then(|results| {
+            if results.hir_owner == hir_ty.hir_id.owner {
+                results.node_type_opt(hir_ty.hir_id)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| lower_ty(cx.tcx, hir_ty))
+}
 
 /// Checks if the given type implements copy.
 pub fn is_copy<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
@@ -96,7 +110,7 @@ pub fn contains_ty_adt_constructor_opaque<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'
                         return false;
                     }
 
-                    for (predicate, _span) in cx.tcx.explicit_item_super_predicates(def_id).iter_identity_copied() {
+                    for (predicate, _span) in cx.tcx.explicit_item_self_bounds(def_id).iter_identity_copied() {
                         match predicate.kind().skip_binder() {
                             // For `impl Trait<U>`, it will register a predicate of `T: Trait<U>`, so we go through
                             // and check substitutions to find `U`.
@@ -322,7 +336,7 @@ pub fn is_must_use_ty<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
         },
         ty::Tuple(args) => args.iter().any(|ty| is_must_use_ty(cx, ty)),
         ty::Alias(ty::Opaque, AliasTy { def_id, .. }) => {
-            for (predicate, _) in cx.tcx.explicit_item_super_predicates(def_id).skip_binder() {
+            for (predicate, _) in cx.tcx.explicit_item_self_bounds(def_id).skip_binder() {
                 if let ty::ClauseKind::Trait(trait_predicate) = predicate.kind().skip_binder() {
                     if cx.tcx.has_attr(trait_predicate.trait_ref.def_id, sym::must_use) {
                         return true;
@@ -712,7 +726,7 @@ pub fn ty_sig<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> Option<ExprFnSig<'t
         ty::Alias(ty::Opaque, AliasTy { def_id, args, .. }) => sig_from_bounds(
             cx,
             ty,
-            cx.tcx.item_super_predicates(def_id).iter_instantiated(cx.tcx, args),
+            cx.tcx.item_self_bounds(def_id).iter_instantiated(cx.tcx, args),
             cx.tcx.opt_parent(def_id),
         ),
         ty::FnPtr(sig_tys, hdr) => Some(ExprFnSig::Sig(sig_tys.with(hdr), None)),
