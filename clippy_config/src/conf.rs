@@ -1,8 +1,8 @@
 use crate::ClippyConfiguration;
 use crate::types::{
-    DisallowedPath, MacroMatcher, MatchLintBehaviour, PubUnderscoreFieldsBehaviour, Rename, SourceItemOrdering,
-    SourceItemOrderingCategory, SourceItemOrderingModuleItemGroupings, SourceItemOrderingModuleItemKind,
-    SourceItemOrderingTraitAssocItemKind, SourceItemOrderingTraitAssocItemKinds,
+    DisallowedPath, DisallowedPathWithoutReplacement, MacroMatcher, MatchLintBehaviour, PubUnderscoreFieldsBehaviour,
+    Rename, SourceItemOrdering, SourceItemOrderingCategory, SourceItemOrderingModuleItemGroupings,
+    SourceItemOrderingModuleItemKind, SourceItemOrderingTraitAssocItemKind, SourceItemOrderingTraitAssocItemKinds,
 };
 use clippy_utils::msrvs::Msrv;
 use rustc_errors::Applicability;
@@ -448,7 +448,7 @@ define_Conf! {
     avoid_breaking_exported_api: bool = true,
     /// The list of types which may not be held across an await point.
     #[lints(await_holding_invalid_type)]
-    await_holding_invalid_types: Vec<DisallowedPath> = Vec::new(),
+    await_holding_invalid_types: Vec<DisallowedPathWithoutReplacement> = Vec::new(),
     /// DEPRECATED LINT: BLACKLISTED_NAME.
     ///
     /// Use the Disallowed Names lint instead
@@ -613,6 +613,7 @@ define_Conf! {
         manual_bits,
         manual_c_str_literals,
         manual_clamp,
+        manual_flatten,
         manual_hash_one,
         manual_is_ascii_check,
         manual_let_else,
