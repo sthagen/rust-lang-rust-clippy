@@ -71,6 +71,16 @@ Whether `dbg!` should be allowed in test functions or `#[cfg(test)]`
 * [`dbg_macro`](https://rust-lang.github.io/rust-clippy/master/index.html#dbg_macro)
 
 
+## `allow-expect-in-consts`
+Whether `expect` should be allowed in code always evaluated at compile time
+
+**Default Value:** `true`
+
+---
+**Affected lints:**
+* [`expect_used`](https://rust-lang.github.io/rust-clippy/master/index.html#expect_used)
+
+
 ## `allow-expect-in-tests`
 Whether `expect` should be allowed in test functions or `#[cfg(test)]`
 
@@ -162,6 +172,16 @@ default configuration of Clippy. By default, any configuration will replace the 
 ---
 **Affected lints:**
 * [`renamed_function_params`](https://rust-lang.github.io/rust-clippy/master/index.html#renamed_function_params)
+
+
+## `allow-unwrap-in-consts`
+Whether `unwrap` should be allowed in code always evaluated at compile time
+
+**Default Value:** `true`
+
+---
+**Affected lints:**
+* [`unwrap_used`](https://rust-lang.github.io/rust-clippy/master/index.html#unwrap_used)
 
 
 ## `allow-unwrap-in-tests`
@@ -764,6 +784,7 @@ The minimum rust version that the project supports. Defaults to the `rust-versio
 * [`map_unwrap_or`](https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or)
 * [`map_with_unused_argument_over_ranges`](https://rust-lang.github.io/rust-clippy/master/index.html#map_with_unused_argument_over_ranges)
 * [`match_like_matches_macro`](https://rust-lang.github.io/rust-clippy/master/index.html#match_like_matches_macro)
+* [`mem_replace_option_with_some`](https://rust-lang.github.io/rust-clippy/master/index.html#mem_replace_option_with_some)
 * [`mem_replace_with_default`](https://rust-lang.github.io/rust-clippy/master/index.html#mem_replace_with_default)
 * [`missing_const_for_fn`](https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn)
 * [`needless_borrow`](https://rust-lang.github.io/rust-clippy/master/index.html#needless_borrow)

@@ -288,6 +288,9 @@ define_Conf! {
     /// Whether `dbg!` should be allowed in test functions or `#[cfg(test)]`
     #[lints(dbg_macro)]
     allow_dbg_in_tests: bool = false,
+    /// Whether `expect` should be allowed in code always evaluated at compile time
+    #[lints(expect_used)]
+    allow_expect_in_consts: bool = true,
     /// Whether `expect` should be allowed in test functions or `#[cfg(test)]`
     #[lints(expect_used)]
     allow_expect_in_tests: bool = false,
@@ -325,6 +328,9 @@ define_Conf! {
     #[lints(renamed_function_params)]
     allow_renamed_params_for: Vec<String> =
         DEFAULT_ALLOWED_TRAITS_WITH_RENAMED_PARAMS.iter().map(ToString::to_string).collect(),
+    /// Whether `unwrap` should be allowed in code always evaluated at compile time
+    #[lints(unwrap_used)]
+    allow_unwrap_in_consts: bool = true,
     /// Whether `unwrap` should be allowed in test functions or `#[cfg(test)]`
     #[lints(unwrap_used)]
     allow_unwrap_in_tests: bool = false,
@@ -633,6 +639,7 @@ define_Conf! {
         map_unwrap_or,
         map_with_unused_argument_over_ranges,
         match_like_matches_macro,
+        mem_replace_option_with_some,
         mem_replace_with_default,
         missing_const_for_fn,
         needless_borrow,

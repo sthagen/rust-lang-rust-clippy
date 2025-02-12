@@ -113,6 +113,7 @@ mod suspicious_map;
 mod suspicious_splitn;
 mod suspicious_to_owned;
 mod type_id_on_box;
+mod unbuffered_bytes;
 mod uninit_assumed_init;
 mod unit_hash;
 mod unnecessary_fallible_conversions;
@@ -4406,11 +4407,41 @@ declare_clippy_lint! {
     "using `Option::and_then` or `Result::and_then` to chain a computation that returns an `Option` or a `Result`"
 }
 
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for calls to `Read::bytes` on types which don't implement `BufRead`.
+    ///
+    /// ### Why is this bad?
+    /// The default implementation calls `read` for each byte, which can be very inefficient for data that’s not in memory, such as `File`.
+    ///
+    /// ### Example
+    /// ```no_run
+    /// use std::io::Read;
+    /// use std::fs::File;
+    /// let file = File::open("./bytes.txt").unwrap();
+    /// file.bytes();
+    /// ```
+    /// Use instead:
+    /// ```no_run
+    /// use std::io::{BufReader, Read};
+    /// use std::fs::File;
+    /// let file = BufReader::new(std::fs::File::open("./bytes.txt").unwrap());
+    /// file.bytes();
+    /// ```
+    #[clippy::version = "1.86.0"]
+    pub UNBUFFERED_BYTES,
+    perf,
+    "calling .bytes() is very inefficient when data is not in memory"
+}
+
+#[expect(clippy::struct_excessive_bools)]
 pub struct Methods {
     avoid_breaking_exported_api: bool,
     msrv: Msrv,
     allow_expect_in_tests: bool,
     allow_unwrap_in_tests: bool,
+    allow_expect_in_consts: bool,
+    allow_unwrap_in_consts: bool,
     allowed_dotfiles: FxHashSet<&'static str>,
     format_args: FormatArgsStorage,
 }
@@ -4425,6 +4456,8 @@ impl Methods {
             msrv: conf.msrv.clone(),
             allow_expect_in_tests: conf.allow_expect_in_tests,
             allow_unwrap_in_tests: conf.allow_unwrap_in_tests,
+            allow_expect_in_consts: conf.allow_expect_in_consts,
+            allow_unwrap_in_consts: conf.allow_unwrap_in_consts,
             allowed_dotfiles,
             format_args,
         }
@@ -4575,6 +4608,7 @@ impl_lint_pass!(Methods => [
     MANUAL_REPEAT_N,
     SLICED_STRING_AS_BYTES,
     RETURN_AND_THEN,
+    UNBUFFERED_BYTES,
 ]);
 
 /// Extracts a method call name, args, and `Span` of the method name.
@@ -4851,6 +4885,7 @@ impl Methods {
                 ("as_ptr", []) => manual_c_str_literals::check_as_ptr(cx, expr, recv, &self.msrv),
                 ("as_ref", []) => useless_asref::check(cx, expr, "as_ref", recv),
                 ("assume_init", []) => uninit_assumed_init::check(cx, expr, recv),
+                ("bytes", []) => unbuffered_bytes::check(cx, expr, recv),
                 ("cloned", []) => {
                     cloned_instead_of_copied::check(cx, expr, recv, span, &self.msrv);
                     option_as_ref_cloned::check(cx, recv, span);
@@ -4918,6 +4953,7 @@ impl Methods {
                             expr,
                             recv,
                             false,
+                            self.allow_expect_in_consts,
                             self.allow_expect_in_tests,
                             unwrap_expect_used::Variant::Expect,
                         ),
@@ -4931,6 +4967,7 @@ impl Methods {
                         expr,
                         recv,
                         true,
+                        self.allow_expect_in_consts,
                         self.allow_expect_in_tests,
                         unwrap_expect_used::Variant::Expect,
                     );
@@ -5304,6 +5341,7 @@ impl Methods {
                         expr,
                         recv,
                         false,
+                        self.allow_unwrap_in_consts,
                         self.allow_unwrap_in_tests,
                         unwrap_expect_used::Variant::Unwrap,
                     );
@@ -5315,6 +5353,7 @@ impl Methods {
                         expr,
                         recv,
                         true,
+                        self.allow_unwrap_in_consts,
                         self.allow_unwrap_in_tests,
                         unwrap_expect_used::Variant::Unwrap,
                     );
