@@ -137,24 +137,13 @@ use rustc_middle::hir::nested_filter;
 
 #[macro_export]
 macro_rules! extract_msrv_attr {
-    (LateContext) => {
-        fn check_attributes(&mut self, cx: &rustc_lint::LateContext<'_>, attrs: &[rustc_hir::Attribute]) {
+    () => {
+        fn check_attributes(&mut self, cx: &rustc_lint::EarlyContext<'_>, attrs: &[rustc_ast::ast::Attribute]) {
             let sess = rustc_lint::LintContext::sess(cx);
             self.msrv.check_attributes(sess, attrs);
         }
 
-        fn check_attributes_post(&mut self, cx: &rustc_lint::LateContext<'_>, attrs: &[rustc_hir::Attribute]) {
-            let sess = rustc_lint::LintContext::sess(cx);
-            self.msrv.check_attributes_post(sess, attrs);
-        }
-    };
-    (EarlyContext) => {
-        fn check_attributes(&mut self, cx: &rustc_lint::EarlyContext<'_>, attrs: &[rustc_ast::Attribute]) {
-            let sess = rustc_lint::LintContext::sess(cx);
-            self.msrv.check_attributes(sess, attrs);
-        }
-
-        fn check_attributes_post(&mut self, cx: &rustc_lint::EarlyContext<'_>, attrs: &[rustc_ast::Attribute]) {
+        fn check_attributes_post(&mut self, cx: &rustc_lint::EarlyContext<'_>, attrs: &[rustc_ast::ast::Attribute]) {
             let sess = rustc_lint::LintContext::sess(cx);
             self.msrv.check_attributes_post(sess, attrs);
         }
@@ -1750,6 +1739,17 @@ pub fn is_integer_literal(expr: &Expr<'_>, value: u128) -> bool {
         }
     }
     false
+}
+
+/// Checks whether the given expression is a constant literal of the given value.
+pub fn is_float_literal(expr: &Expr<'_>, value: f64) -> bool {
+    if let ExprKind::Lit(spanned) = expr.kind
+        && let LitKind::Float(v, _) = spanned.node
+    {
+        v.as_str().parse() == Ok(value)
+    } else {
+        false
+    }
 }
 
 /// Returns `true` if the given `Expr` has been coerced before.
@@ -3640,7 +3640,10 @@ pub fn expr_requires_coercion<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) -
         ExprKind::Struct(qpath, _, _) => {
             let res = cx.typeck_results().qpath_res(qpath, expr.hir_id);
             if let Some((_, v_def)) = adt_and_variant_of_res(cx, res) {
-                let generic_args = cx.typeck_results().node_args(expr.hir_id);
+                let rustc_ty::Adt(_, generic_args) = cx.typeck_results().expr_ty_adjusted(expr).kind() else {
+                    // This should never happen, but when it does, not linting is the better option.
+                    return true;
+                };
                 v_def
                     .fields
                     .iter()

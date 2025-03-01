@@ -464,6 +464,9 @@ define_Conf! {
     /// For internal testing only, ignores the current `publish` settings in the Cargo manifest.
     #[lints(cargo_common_metadata)]
     cargo_ignore_publish: bool = false,
+    /// Whether to check MSRV compatibility in `#[test]` and `#[cfg(test)]` code.
+    #[lints(incompatible_msrv)]
+    check_incompatible_msrv_in_tests: bool = false,
     /// Whether to also run the listed lints on private items.
     #[lints(missing_errors_doc, missing_panics_doc, missing_safety_doc, unnecessary_safety_doc)]
     check_private_items: bool = false,
@@ -626,6 +629,7 @@ define_Conf! {
         manual_hash_one,
         manual_is_ascii_check,
         manual_let_else,
+        manual_midpoint,
         manual_non_exhaustive,
         manual_option_as_slice,
         manual_pattern_char_comparison,
@@ -666,7 +670,7 @@ define_Conf! {
         unused_trait_names,
         use_self,
     )]
-    msrv: Msrv = Msrv::empty(),
+    msrv: Msrv = Msrv::default(),
     /// The minimum size (in bytes) to consider a type for passing by reference instead of by value.
     #[lints(large_types_passed_by_value)]
     pass_by_value_size_limit: u64 = 256,
