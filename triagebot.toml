@@ -13,6 +13,9 @@ allow-unauthenticated = [
 
 [canonicalize-issue-links]
 
+# Prevents mentions in commits to avoid users being spammed
+[no-mentions]
+
 # Have rustbot inform users about the *No Merge Policy*
 [no-merges]
 exclude_titles = ["Rustup"] # exclude syncs from rust-lang/rust
@@ -41,6 +44,7 @@ users_on_vacation = [
 
 [assign.owners]
 "/.github" = ["@flip1995"]
+"/triagebot.toml" = ["@flip1995"]
 "/book" = ["@flip1995"]
 "*" = [
     "@Manishearth",
