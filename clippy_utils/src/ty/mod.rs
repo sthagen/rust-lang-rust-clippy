@@ -20,8 +20,8 @@ use rustc_middle::traits::EvaluationResult;
 use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_middle::ty::{
     self, AdtDef, AliasTy, AssocItem, AssocTag, Binder, BoundRegion, FnSig, GenericArg, GenericArgKind, GenericArgsRef,
-    GenericParamDefKind, IntTy, Region, RegionKind, TraitRef, Ty, TyCtxt, TypeSuperVisitable, TypeVisitable,
-    TypeVisitableExt, TypeVisitor, UintTy, Upcast, VariantDef, VariantDiscr,
+    GenericParamDefKind, IntTy, Region, RegionKind, TraitRef, Ty, TyCtxt, TypeFoldable, TypeSuperVisitable,
+    TypeVisitable, TypeVisitableExt, TypeVisitor, UintTy, Upcast, VariantDef, VariantDiscr,
 };
 use rustc_span::symbol::Ident;
 use rustc_span::{DUMMY_SP, Span, Symbol, sym};
@@ -853,7 +853,7 @@ pub fn for_each_top_level_late_bound_region<B>(
                 ControlFlow::Continue(())
             }
         }
-        fn visit_binder<T: TypeVisitable<TyCtxt<'tcx>>>(&mut self, t: &Binder<'tcx, T>) -> Self::Result {
+        fn visit_binder<T: TypeFoldable<TyCtxt<'tcx>>>(&mut self, t: &Binder<'tcx, T>) -> Self::Result {
             self.index += 1;
             let res = t.super_visit_with(self);
             self.index -= 1;
@@ -1360,4 +1360,15 @@ pub fn is_slice_like<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
     ty.is_slice()
         || ty.is_array()
         || matches!(ty.kind(), ty::Adt(adt_def, _) if cx.tcx.is_diagnostic_item(sym::Vec, adt_def.did()))
+}
+
+/// Gets the index of a field by name.
+pub fn get_field_idx_by_name(ty: Ty<'_>, name: Symbol) -> Option<usize> {
+    match *ty.kind() {
+        ty::Adt(def, _) if def.is_union() || def.is_struct() => {
+            def.non_enum_variant().fields.iter().position(|f| f.name == name)
+        },
+        ty::Tuple(_) => name.as_str().parse::<usize>().ok(),
+        _ => None,
+    }
 }
