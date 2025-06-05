@@ -5685,6 +5685,7 @@ Released 2018-09-13
 [`cmp_nan`]: https://rust-lang.github.io/rust-clippy/master/index.html#cmp_nan
 [`cmp_null`]: https://rust-lang.github.io/rust-clippy/master/index.html#cmp_null
 [`cmp_owned`]: https://rust-lang.github.io/rust-clippy/master/index.html#cmp_owned
+[`coerce_container_to_any`]: https://rust-lang.github.io/rust-clippy/master/index.html#coerce_container_to_any
 [`cognitive_complexity`]: https://rust-lang.github.io/rust-clippy/master/index.html#cognitive_complexity
 [`collapsible_else_if`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_else_if
 [`collapsible_if`]: https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
@@ -5736,6 +5737,7 @@ Released 2018-09-13
 [`doc_markdown`]: https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
 [`doc_nested_refdefs`]: https://rust-lang.github.io/rust-clippy/master/index.html#doc_nested_refdefs
 [`doc_overindented_list_items`]: https://rust-lang.github.io/rust-clippy/master/index.html#doc_overindented_list_items
+[`doc_suspicious_footnotes`]: https://rust-lang.github.io/rust-clippy/master/index.html#doc_suspicious_footnotes
 [`double_comparisons`]: https://rust-lang.github.io/rust-clippy/master/index.html#double_comparisons
 [`double_ended_iterator_last`]: https://rust-lang.github.io/rust-clippy/master/index.html#double_ended_iterator_last
 [`double_must_use`]: https://rust-lang.github.io/rust-clippy/master/index.html#double_must_use
@@ -5889,6 +5891,7 @@ Released 2018-09-13
 [`inverted_saturating_sub`]: https://rust-lang.github.io/rust-clippy/master/index.html#inverted_saturating_sub
 [`invisible_characters`]: https://rust-lang.github.io/rust-clippy/master/index.html#invisible_characters
 [`io_other_error`]: https://rust-lang.github.io/rust-clippy/master/index.html#io_other_error
+[`ip_constant`]: https://rust-lang.github.io/rust-clippy/master/index.html#ip_constant
 [`is_digit_ascii_radix`]: https://rust-lang.github.io/rust-clippy/master/index.html#is_digit_ascii_radix
 [`items_after_statements`]: https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
 [`items_after_test_module`]: https://rust-lang.github.io/rust-clippy/master/index.html#items_after_test_module
