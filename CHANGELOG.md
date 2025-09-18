@@ -17,7 +17,7 @@ Current stable, released 2025-09-18
 Note: This Clippy release does not introduce many new lints and is focused entirely on bug fixes — see
 [#15086](https://github.com/rust-lang/rust-clippy/issues/15086) for more details.
 
-## New Lints
+### New Lints
 
 * Added [`manual_is_multiple_of`] to `complexity` [#14292](https://github.com/rust-lang/rust-clippy/pull/14292)
 * Added [`doc_broken_link`] to `pedantic` [#13696](https://github.com/rust-lang/rust-clippy/pull/13696)
@@ -6553,6 +6553,7 @@ Released 2018-09-13
 [`redundant_feature_names`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_feature_names
 [`redundant_field_names`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_field_names
 [`redundant_guards`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_guards
+[`redundant_iter_cloned`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_iter_cloned
 [`redundant_locals`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_locals
 [`redundant_pattern`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_pattern
 [`redundant_pattern_matching`]: https://rust-lang.github.io/rust-clippy/master/index.html#redundant_pattern_matching
