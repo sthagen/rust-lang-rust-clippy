@@ -482,7 +482,7 @@ pub fn register_lint_passes(store: &mut rustc_lint::LintStore, conf: &'static Co
     store.register_late_pass(|_| Box::new(needless_for_each::NeedlessForEach));
     store.register_late_pass(|_| Box::new(misc::LintPass));
     store.register_late_pass(|_| Box::new(eta_reduction::EtaReduction));
-    store.register_late_pass(|_| Box::new(mut_mut::MutMut));
+    store.register_late_pass(|_| Box::new(mut_mut::MutMut::default()));
     store.register_late_pass(|_| Box::new(unnecessary_mut_passed::UnnecessaryMutPassed));
     store.register_late_pass(|_| Box::<significant_drop_tightening::SignificantDropTightening<'_>>::default());
     store.register_late_pass(|_| Box::new(len_zero::LenZero));
@@ -595,7 +595,7 @@ pub fn register_lint_passes(store: &mut rustc_lint::LintStore, conf: &'static Co
     store.register_late_pass(|_| Box::new(redundant_clone::RedundantClone));
     store.register_late_pass(|_| Box::new(slow_vector_initialization::SlowVectorInit));
     store.register_late_pass(move |_| Box::new(unnecessary_wraps::UnnecessaryWraps::new(conf)));
-    store.register_late_pass(|_| Box::new(assertions_on_constants::AssertionsOnConstants));
+    store.register_late_pass(|_| Box::new(assertions_on_constants::AssertionsOnConstants::new(conf)));
     store.register_late_pass(|_| Box::new(assertions_on_result_states::AssertionsOnResultStates));
     store.register_late_pass(|_| Box::new(inherent_to_string::InherentToString));
     store.register_late_pass(move |_| Box::new(trait_bounds::TraitBounds::new(conf)));
