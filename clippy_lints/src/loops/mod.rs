@@ -871,7 +871,10 @@ impl<'tcx> LateLintPass<'tcx> for Loops {
 
         while_let_on_iterator::check(cx, expr);
 
-        if let Some(higher::While { condition, body, span }) = higher::While::hir(expr) {
+        if let Some(higher::While {
+            condition, body, span, ..
+        }) = higher::While::hir(expr)
+        {
             while_immutable_condition::check(cx, condition, body);
             while_float::check(cx, condition);
             missing_spin_loop::check(cx, condition, body);
@@ -881,7 +884,7 @@ impl<'tcx> LateLintPass<'tcx> for Loops {
 }
 
 impl Loops {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn check_for_loop<'tcx>(
         &self,
         cx: &LateContext<'tcx>,

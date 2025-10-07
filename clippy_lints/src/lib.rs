@@ -323,6 +323,7 @@ mod ref_patterns;
 mod reference;
 mod regex;
 mod repeat_vec_with_capacity;
+mod replace_box;
 mod reserve_after_initialization;
 mod return_self_not_must_use;
 mod returns;
@@ -399,6 +400,7 @@ mod useless_conversion;
 mod vec;
 mod vec_init_then_push;
 mod visibility;
+mod volatile_composites;
 mod wildcard_imports;
 mod write;
 mod zero_div_zero;
@@ -617,7 +619,7 @@ pub fn register_lint_passes(store: &mut rustc_lint::LintStore, conf: &'static Co
     store.register_late_pass(|_| Box::new(items_after_statements::ItemsAfterStatements));
     store.register_early_pass(|| Box::new(precedence::Precedence));
     store.register_late_pass(|_| Box::new(needless_parens_on_range_literals::NeedlessParensOnRangeLiterals));
-    store.register_early_pass(|| Box::new(needless_continue::NeedlessContinue));
+    store.register_late_pass(|_| Box::new(needless_continue::NeedlessContinue));
     store.register_early_pass(|| Box::new(redundant_else::RedundantElse));
     store.register_late_pass(|_| Box::new(create_dir::CreateDir));
     store.register_early_pass(|| Box::new(needless_arbitrary_self_type::NeedlessArbitrarySelfType));
@@ -830,5 +832,7 @@ pub fn register_lint_passes(store: &mut rustc_lint::LintStore, conf: &'static Co
     store.register_late_pass(|_| Box::new(infallible_try_from::InfallibleTryFrom));
     store.register_late_pass(|_| Box::new(coerce_container_to_any::CoerceContainerToAny));
     store.register_late_pass(|_| Box::new(toplevel_ref_arg::ToplevelRefArg));
+    store.register_late_pass(|_| Box::new(volatile_composites::VolatileComposites));
+    store.register_late_pass(|_| Box::new(replace_box::ReplaceBox));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
