@@ -6542,6 +6542,7 @@ Released 2018-09-13
 [`manual_flatten`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_flatten
 [`manual_hash_one`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_hash_one
 [`manual_ignore_case_cmp`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_ignore_case_cmp
+[`manual_ilog2`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_ilog2
 [`manual_inspect`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_inspect
 [`manual_instant_elapsed`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_instant_elapsed
 [`manual_is_ascii_check`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_is_ascii_check
@@ -7083,6 +7084,7 @@ Released 2018-09-13
 [`allow-expect-in-consts`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-expect-in-consts
 [`allow-expect-in-tests`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-expect-in-tests
 [`allow-indexing-slicing-in-tests`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-indexing-slicing-in-tests
+[`allow-large-stack-frames-in-tests`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-large-stack-frames-in-tests
 [`allow-mixed-uninlined-format-args`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-mixed-uninlined-format-args
 [`allow-one-hash-in-raw-strings`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-one-hash-in-raw-strings
 [`allow-panic-in-tests`]: https://doc.rust-lang.org/clippy/lint_configuration.html#allow-panic-in-tests
