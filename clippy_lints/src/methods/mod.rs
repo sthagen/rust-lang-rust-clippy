@@ -4670,7 +4670,7 @@ declare_clippy_lint! {
     /// let x = vec![String::new()];
     /// let _ = x.iter().map(|x| x.len());
     /// ```
-    #[clippy::version = "1.90.0"]
+    #[clippy::version = "1.92.0"]
     pub REDUNDANT_ITER_CLONED,
     perf,
     "detects redundant calls to `Iterator::cloned`"
@@ -4694,7 +4694,7 @@ declare_clippy_lint! {
     /// let x: Option<u32> = Some(4);
     /// let y = x.unwrap_or_else(|| 2 * k);
     /// ```
-    #[clippy::version = "1.88.0"]
+    #[clippy::version = "1.92.0"]
     pub UNNECESSARY_OPTION_MAP_OR_ELSE,
     suspicious,
     "making no use of the \"map closure\" when calling `.map_or_else(|| 2 * k, |n| n)`"
@@ -5604,14 +5604,7 @@ impl Methods {
                 (sym::unwrap_or, [u_arg]) => {
                     match method_call(recv) {
                         Some((arith @ (sym::checked_add | sym::checked_sub | sym::checked_mul), lhs, [rhs], _, _)) => {
-                            manual_saturating_arithmetic::check(
-                                cx,
-                                expr,
-                                lhs,
-                                rhs,
-                                u_arg,
-                                &arith.as_str()[const { "checked_".len() }..],
-                            );
+                            manual_saturating_arithmetic::check_unwrap_or(cx, expr, lhs, rhs, u_arg, arith);
                         },
                         Some((sym::map, m_recv, [m_arg], span, _)) => {
                             option_map_unwrap_or::check(cx, expr, m_recv, m_arg, recv, u_arg, span, self.msrv);
@@ -5632,6 +5625,9 @@ impl Methods {
                 },
                 (sym::unwrap_or_default, []) => {
                     match method_call(recv) {
+                        Some((sym::checked_sub, lhs, [rhs], _, _)) => {
+                            manual_saturating_arithmetic::check_sub_unwrap_or_default(cx, expr, lhs, rhs);
+                        },
                         Some((sym::map, m_recv, [arg], span, _)) => {
                             manual_is_variant_and::check(cx, expr, m_recv, arg, span, self.msrv);
                         },
