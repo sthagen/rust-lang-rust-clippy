@@ -197,6 +197,7 @@ impl TestContext {
             defaults.set_custom("diagnostic-collector", collector);
         }
         config.with_args(&self.args);
+
         config.program.args.extend(
             [
                 "--emit=metadata",
@@ -220,12 +221,7 @@ impl TestContext {
             config.program.args.push(format!("--sysroot={sysroot}").into());
         }
 
-        let profile_path = target_dir.join(env!("PROFILE"));
-        config.program.program = profile_path.join(if cfg!(windows) {
-            "clippy-driver.exe"
-        } else {
-            "clippy-driver"
-        });
+        config.program.program = PathBuf::from(env!("CARGO_BIN_EXE_clippy-driver"));
 
         config
     }
