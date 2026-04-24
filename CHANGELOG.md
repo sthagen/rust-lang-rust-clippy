@@ -6804,6 +6804,7 @@ Released 2018-09-13
 [`inline_asm_x86_att_syntax`]: https://rust-lang.github.io/rust-clippy/master/index.html#inline_asm_x86_att_syntax
 [`inline_asm_x86_intel_syntax`]: https://rust-lang.github.io/rust-clippy/master/index.html#inline_asm_x86_intel_syntax
 [`inline_fn_without_body`]: https://rust-lang.github.io/rust-clippy/master/index.html#inline_fn_without_body
+[`inline_modules`]: https://rust-lang.github.io/rust-clippy/master/index.html#inline_modules
 [`inspect_for_each`]: https://rust-lang.github.io/rust-clippy/master/index.html#inspect_for_each
 [`int_plus_one`]: https://rust-lang.github.io/rust-clippy/master/index.html#int_plus_one
 [`integer_arithmetic`]: https://rust-lang.github.io/rust-clippy/master/index.html#integer_arithmetic
@@ -6878,6 +6879,7 @@ Released 2018-09-13
 [`main_recursion`]: https://rust-lang.github.io/rust-clippy/master/index.html#main_recursion
 [`manual_abs_diff`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_abs_diff
 [`manual_assert`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_assert
+[`manual_assert_eq`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_assert_eq
 [`manual_async_fn`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_async_fn
 [`manual_bits`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_bits
 [`manual_c_str_literals`]: https://rust-lang.github.io/rust-clippy/master/index.html#manual_c_str_literals
