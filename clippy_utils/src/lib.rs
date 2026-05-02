@@ -469,19 +469,23 @@ pub fn trait_ref_of_method<'tcx>(cx: &LateContext<'tcx>, owner: OwnerId) -> Opti
 /// this method will return a tuple, composed of a `Vec`
 /// containing the `Expr`s for `v[0], v[0].a, v[0].a.b, v[0].a.b[x]`
 /// and an `Expr` for root of them, `v`
-fn projection_stack<'a, 'hir>(mut e: &'a Expr<'hir>) -> (Vec<&'a Expr<'hir>>, &'a Expr<'hir>) {
+fn projection_stack<'a, 'hir>(
+    mut e: &'a Expr<'hir>,
+    ctxt: SyntaxContext,
+) -> Option<(Vec<&'a Expr<'hir>>, &'a Expr<'hir>)> {
     let mut result = vec![];
     let root = loop {
         match e.kind {
-            ExprKind::Index(ep, _, _) | ExprKind::Field(ep, _) => {
+            ExprKind::Index(ep, _, _) | ExprKind::Field(ep, _) if e.span.ctxt() == ctxt => {
                 result.push(e);
                 e = ep;
             },
+            ExprKind::Index(..) | ExprKind::Field(..) => return None,
             _ => break e,
         }
     };
     result.reverse();
-    (result, root)
+    Some((result, root))
 }
 
 /// Gets the mutability of the custom deref adjustment, if any.
@@ -499,10 +503,14 @@ pub fn expr_custom_deref_adjustment(cx: &LateContext<'_>, e: &Expr<'_>) -> Optio
 
 /// Checks if two expressions can be mutably borrowed simultaneously
 /// and they aren't dependent on borrowing same thing twice
-pub fn can_mut_borrow_both(cx: &LateContext<'_>, e1: &Expr<'_>, e2: &Expr<'_>) -> bool {
-    let (s1, r1) = projection_stack(e1);
-    let (s2, r2) = projection_stack(e2);
-    if !eq_expr_value(cx, r1, r2) {
+pub fn can_mut_borrow_both(cx: &LateContext<'_>, ctxt: SyntaxContext, e1: &Expr<'_>, e2: &Expr<'_>) -> bool {
+    let Some((s1, r1)) = projection_stack(e1, ctxt) else {
+        return false;
+    };
+    let Some((s2, r2)) = projection_stack(e2, ctxt) else {
+        return false;
+    };
+    if !eq_expr_value(cx, ctxt, r1, r2) {
         return true;
     }
     if expr_custom_deref_adjustment(cx, r1).is_some() || expr_custom_deref_adjustment(cx, r2).is_some() {
@@ -518,11 +526,6 @@ pub fn can_mut_borrow_both(cx: &LateContext<'_>, e1: &Expr<'_>, e2: &Expr<'_>) -
             (ExprKind::Field(_, i1), ExprKind::Field(_, i2)) => {
                 if i1 != i2 {
                     return true;
-                }
-            },
-            (ExprKind::Index(_, i1, _), ExprKind::Index(_, i2, _)) => {
-                if !eq_expr_value(cx, i1, i2) {
-                    return false;
                 }
             },
             _ => return false,
@@ -548,7 +551,12 @@ fn is_default_equivalent_ctor(cx: &LateContext<'_>, def_id: DefId, path: &QPath<
     if let QPath::TypeRelative(_, method) = path
         && method.ident.name == sym::new
         && let Some(impl_did) = cx.tcx.impl_of_assoc(def_id)
-        && let Some(adt) = cx.tcx.type_of(impl_did).instantiate_identity().ty_adt_def()
+        && let Some(adt) = cx
+            .tcx
+            .type_of(impl_did)
+            .instantiate_identity()
+            .skip_norm_wip()
+            .ty_adt_def()
     {
         return Some(adt.did()) == cx.tcx.lang_items().string()
             || (cx.tcx.get_diagnostic_name(adt.did())).is_some_and(|adt_name| std_types_symbols.contains(&adt_name));
@@ -1483,13 +1491,18 @@ pub fn is_direct_expn_of(span: Span, name: Symbol) -> Option<Span> {
 
 /// Convenience function to get the return type of a function.
 pub fn return_ty<'tcx>(cx: &LateContext<'tcx>, fn_def_id: OwnerId) -> Ty<'tcx> {
-    let ret_ty = cx.tcx.fn_sig(fn_def_id).instantiate_identity().output();
+    let ret_ty = cx.tcx.fn_sig(fn_def_id).instantiate_identity().skip_norm_wip().output();
     cx.tcx.instantiate_bound_regions_with_erased(ret_ty)
 }
 
 /// Convenience function to get the nth argument type of a function.
 pub fn nth_arg<'tcx>(cx: &LateContext<'tcx>, fn_def_id: OwnerId, nth: usize) -> Ty<'tcx> {
-    let arg = cx.tcx.fn_sig(fn_def_id).instantiate_identity().input(nth);
+    let arg = cx
+        .tcx
+        .fn_sig(fn_def_id)
+        .instantiate_identity()
+        .skip_norm_wip()
+        .input(nth);
     cx.tcx.instantiate_bound_regions_with_erased(arg)
 }
 
@@ -2634,7 +2647,7 @@ impl<'tcx> ExprUseNode<'tcx> {
             Self::LetStmt(LetStmt { ty: Some(ty), .. }) => Some(DefinedTy::Hir(ty)),
             Self::ConstStatic(id) => Some(DefinedTy::Mir {
                 def_site_def_id: Some(id.def_id.to_def_id()),
-                ty: Binder::dummy(cx.tcx.type_of(id).instantiate_identity()),
+                ty: Binder::dummy(cx.tcx.type_of(id).instantiate_identity().skip_norm_wip()),
             }),
             Self::Return(id) => {
                 if let Node::Expr(Expr {
@@ -2647,7 +2660,7 @@ impl<'tcx> ExprUseNode<'tcx> {
                         FnRetTy::Return(ty) => Some(DefinedTy::Hir(ty)),
                     }
                 } else {
-                    let ty = cx.tcx.fn_sig(id).instantiate_identity().output();
+                    let ty = cx.tcx.fn_sig(id).instantiate_identity().skip_norm_wip().output();
                     Some(DefinedTy::Mir {
                         def_site_def_id: Some(id.def_id.to_def_id()),
                         ty,
@@ -2669,7 +2682,7 @@ impl<'tcx> ExprUseNode<'tcx> {
                     })
                     .map(|(adt, field_def)| DefinedTy::Mir {
                         def_site_def_id: Some(adt.did()),
-                        ty: Binder::dummy(cx.tcx.type_of(field_def.did).instantiate_identity()),
+                        ty: Binder::dummy(cx.tcx.type_of(field_def.did).instantiate_identity().skip_norm_wip()),
                     }),
                 _ => None,
             },
@@ -3282,7 +3295,7 @@ pub fn get_path_from_caller_to_method_type<'tcx>(
     match assoc_item.container {
         rustc_ty::AssocContainer::Trait => get_path_to_callee(tcx, from, def_id),
         rustc_ty::AssocContainer::InherentImpl | rustc_ty::AssocContainer::TraitImpl(_) => {
-            let ty = tcx.type_of(def_id).instantiate_identity();
+            let ty = tcx.type_of(def_id).instantiate_identity().skip_norm_wip();
             get_path_to_ty(tcx, from, ty, args)
         },
     }
@@ -3298,7 +3311,7 @@ fn get_path_to_ty<'tcx>(tcx: TyCtxt<'tcx>, from: LocalDefId, ty: Ty<'tcx>, args:
         | rustc_ty::RawPtr(_, _)
         | rustc_ty::Ref(..)
         | rustc_ty::Slice(_)
-        | rustc_ty::Tuple(_) => format!("<{}>", EarlyBinder::bind(ty).instantiate(tcx, args)),
+        | rustc_ty::Tuple(_) => format!("<{}>", EarlyBinder::bind(ty).instantiate(tcx, args).skip_norm_wip()),
         _ => ty.to_string(),
     }
 }
@@ -3478,7 +3491,7 @@ pub fn expr_requires_coercion<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) -
     // actually have type adjustments.
     match expr.kind {
         ExprKind::Call(_, args) | ExprKind::MethodCall(_, _, args, _) if let Some(def_id) = fn_def_id(cx, expr) => {
-            let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity();
+            let fn_sig = cx.tcx.fn_sig(def_id).instantiate_identity().skip_norm_wip();
 
             if !fn_sig.output().skip_binder().has_type_flags(TypeFlags::HAS_TY_PARAM) {
                 return false;
