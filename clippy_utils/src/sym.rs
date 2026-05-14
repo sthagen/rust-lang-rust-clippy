@@ -604,7 +604,6 @@ generate! {
     to_ne_bytes,
     to_os_string,
     to_owned,
-    to_owned_method,
     to_path_buf,
     to_string_method,
     to_uppercase,
