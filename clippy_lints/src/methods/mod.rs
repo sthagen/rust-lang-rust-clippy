@@ -10,6 +10,7 @@ mod chars_last_cmp;
 mod chars_last_cmp_with_unwrap;
 mod chars_next_cmp;
 mod chars_next_cmp_with_unwrap;
+mod chunks_exact_to_as_chunks;
 mod clear_with_drain;
 mod clone_on_copy;
 mod clone_on_ref_ptr;
@@ -142,6 +143,7 @@ mod unnecessary_map_or_else;
 mod unnecessary_min_or_max;
 mod unnecessary_sort_by;
 mod unnecessary_to_owned;
+mod unnecessary_unwrap_unchecked;
 mod unwrap_expect_used;
 mod useless_asref;
 mod useless_nonzero_new_unchecked;
@@ -361,6 +363,32 @@ declare_clippy_lint! {
     pub CHARS_NEXT_CMP,
     style,
     "using `.chars().next()` to check if a string starts with a char"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for usage of `chunks_exact` or `chunks_exact_mut` with a constant chunk size.
+    ///
+    /// ### Why is this bad?
+    /// `as_chunks` provides better ergonomics and type safety by returning arrays instead of slices.
+    /// It was stabilized in Rust 1.88.
+    ///
+    /// ### Example
+    /// ```no_run
+    /// let slice = [1, 2, 3, 4, 5, 6];
+    /// let mut it = slice.chunks_exact(2);
+    /// for chunk in it {}
+    /// ```
+    /// Use instead:
+    /// ```no_run
+    /// let slice = [1, 2, 3, 4, 5, 6];
+    /// let (chunks, remainder) = slice.as_chunks::<2>();
+    /// for chunk in chunks {}
+    /// ```
+    #[clippy::version = "1.93.0"]
+    pub CHUNKS_EXACT_TO_AS_CHUNKS,
+    style,
+    "using `chunks_exact` with constant when `as_chunks` is more ergonomic"
 }
 
 declare_clippy_lint! {
@@ -4577,6 +4605,34 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
+    /// Checks for calls to `unwrap_unchecked` when an `_unchecked` variant of the function exists.
+    ///
+    /// ### Why is this bad?
+    /// Calling the non-unchecked variant may result in checking that is then discarded
+    /// if `unwrap_unchecked` is called directly afterwards, whereas the unchecked
+    /// variant most likely avoids performing the check completely.
+    ///
+    /// ### Known problems
+    ///
+    /// The unchecked variant is only suggested if it's defined in the same `impl` block
+    /// as the non-unchecked one
+    ///
+    /// ### Example
+    /// ```rust
+    /// let s = unsafe { std::str::from_utf8(&[]).unwrap_unchecked() };
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// let s = unsafe { std::str::from_utf8_unchecked(&[]) };
+    /// ```
+    #[clippy::version = "1.98.0"]
+    pub UNNECESSARY_UNWRAP_UNCHECKED,
+    complexity,
+    "calling `unwrap_unchecked` on a function which has an `_unchecked` variant"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
     /// Checks for usages of the following functions with an argument that constructs a default value
     /// (e.g., `Default::default` or `String::new`):
     /// - `unwrap_or`
@@ -4873,6 +4929,7 @@ impl_lint_pass!(Methods => [
     CASE_SENSITIVE_FILE_EXTENSION_COMPARISONS,
     CHARS_LAST_CMP,
     CHARS_NEXT_CMP,
+    CHUNKS_EXACT_TO_AS_CHUNKS,
     CLEAR_WITH_DRAIN,
     CLONED_INSTEAD_OF_COPIED,
     CLONE_ON_COPY,
@@ -5014,6 +5071,7 @@ impl_lint_pass!(Methods => [
     UNNECESSARY_RESULT_MAP_OR_ELSE,
     UNNECESSARY_SORT_BY,
     UNNECESSARY_TO_OWNED,
+    UNNECESSARY_UNWRAP_UNCHECKED,
     UNWRAP_OR_DEFAULT,
     UNWRAP_USED,
     USELESS_ASREF,
@@ -5233,6 +5291,9 @@ impl Methods {
                         _ => {},
                     }
                 },
+                (name @ (sym::chunks_exact | sym::chunks_exact_mut), [arg]) => {
+                    chunks_exact_to_as_chunks::check(cx, recv, arg, expr, call_span, name, self.msrv);
+                },
                 (sym::and_then, [arg]) => {
                     manual_option_zip::check(cx, expr, recv, arg, self.msrv);
                     let biom_option_linted = bind_instead_of_map::check_and_then_some(cx, expr, recv, arg);
@@ -5370,7 +5431,11 @@ impl Methods {
                     }
                     unnecessary_literal_unwrap::check(cx, expr, recv, name, args);
                 },
-                (sym::expect_err, [_]) | (sym::unwrap_err | sym::unwrap_unchecked | sym::unwrap_err_unchecked, []) => {
+                (sym::unwrap_unchecked, []) => {
+                    unnecessary_unwrap_unchecked::check(cx, expr, recv, call_span);
+                    unnecessary_literal_unwrap::check(cx, expr, recv, name, args);
+                },
+                (sym::expect_err, [_]) | (sym::unwrap_err | sym::unwrap_err_unchecked, []) => {
                     unnecessary_literal_unwrap::check(cx, expr, recv, name, args);
                 },
                 (sym::extend, [arg]) => {
