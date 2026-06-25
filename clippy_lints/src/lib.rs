@@ -454,7 +454,7 @@ pub fn register_lint_passes(store: &mut rustc_lint::LintStore, conf: &'static Co
     // NOTE: Do not add any more pre-expansion passes. These should be removed eventually.
     // Due to the architecture of the compiler, currently `cfg_attr` attributes on crate
     // level (i.e `#![cfg_attr(...)]`) will still be expanded even when using a pre-expansion pass.
-    store.register_pre_expansion_pass(move || Box::new(attrs::EarlyAttributes::new(conf)));
+    store.register_pre_expansion_pass(Box::new(move || Box::new(attrs::EarlyAttributes::new(conf))));
 
     let format_args_storage = FormatArgsStorage::default();
     let attr_storage = AttrStorage::default();
@@ -731,7 +731,7 @@ rustc_lint::late_lint_methods!(
         UndocumentedUnsafeBlocks: undocumented_unsafe_blocks::UndocumentedUnsafeBlocks = undocumented_unsafe_blocks::UndocumentedUnsafeBlocks::new(conf),
         FormatArgs: format_args::FormatArgs<'tcx> = format_args::FormatArgs::new(tcx, conf, format_args.clone()),
         TrailingEmptyArray: trailing_empty_array::TrailingEmptyArray = trailing_empty_array::TrailingEmptyArray,
-        NeedlessLateInit: needless_late_init::NeedlessLateInit = needless_late_init::NeedlessLateInit,
+        NeedlessLateInit: needless_late_init::NeedlessLateInit<'tcx> = needless_late_init::NeedlessLateInit::new(conf),
         ReturnSelfNotMustUse: return_self_not_must_use::ReturnSelfNotMustUse = return_self_not_must_use::ReturnSelfNotMustUse,
         NumberedFields: init_numbered_fields::NumberedFields = init_numbered_fields::NumberedFields,
         ManualBits: manual_bits::ManualBits = manual_bits::ManualBits::new(conf),
