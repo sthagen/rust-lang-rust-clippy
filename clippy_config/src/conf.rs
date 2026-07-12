@@ -3,7 +3,7 @@ use crate::types::{
     DisallowedPath, DisallowedPathWithoutReplacement, InherentImplLintScope, MacroMatcher, MatchLintBehaviour,
     PubUnderscoreFieldsBehaviour, Rename, SourceItemOrdering, SourceItemOrderingCategory,
     SourceItemOrderingModuleItemGroupings, SourceItemOrderingModuleItemKind, SourceItemOrderingTraitAssocItemKind,
-    SourceItemOrderingTraitAssocItemKinds, SourceItemOrderingWithinModuleItemGroupings,
+    SourceItemOrderingTraitAssocItemKinds, SourceItemOrderingWithinModuleItemGroupings, TraitImplItemOrder,
 };
 use clippy_utils::msrvs::Msrv;
 use itertools::Itertools;
@@ -812,6 +812,7 @@ define_Conf! {
         manual_hash_one,
         manual_is_ascii_check,
         manual_is_power_of_two,
+        manual_is_variant_and,
         manual_isolate_lowest_one,
         manual_let_else,
         manual_midpoint,
@@ -916,6 +917,23 @@ define_Conf! {
     /// The order of associated items in traits.
     #[lints(arbitrary_source_item_ordering)]
     trait_assoc_item_kinds_order: SourceItemOrderingTraitAssocItemKinds = DEFAULT_TRAIT_ASSOC_ITEM_KINDS_ORDER.into(),
+    /// The required ordering of associated items in trait impls: purely alphabetical,
+    /// following the trait definition order, or accepting either.
+    ///
+    /// Note that the trait definition order may change between versions of the
+    /// crate defining the trait without being considered a breaking change.
+    ///
+    /// Examples:
+    /// When using trait definition item ordering:
+    /// ```toml
+    /// trait-impl-item-order = "trait_item_ordering"
+    /// ```
+    /// When using trait definition item ordering and alphabetical for fallbacks:
+    /// ```toml
+    /// trait-impl-item-order = "alphabetical_or_trait_item_ordering"
+    /// ```
+    #[lints(arbitrary_source_item_ordering)]
+    trait_impl_item_order: TraitImplItemOrder = TraitImplItemOrder::Alphabetical,
     /// The maximum size (in bytes) to consider a `Copy` type for passing by value instead of by
     /// reference.
     #[default_text = "target_pointer_width"]
