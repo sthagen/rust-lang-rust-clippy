@@ -6,13 +6,13 @@ use crate::types::{
     SourceItemOrderingTraitAssocItemKinds, SourceItemOrderingWithinModuleItemGroupings, TraitImplItemOrder,
 };
 use clippy_utils::msrvs::Msrv;
-use itertools::Itertools;
+use itertools::Itertools as _;
 use rustc_errors::Applicability;
 use rustc_session::Session;
 use rustc_span::edit_distance::edit_distance;
-use rustc_span::{BytePos, Pos, SourceFile, Span, SyntaxContext};
-use serde::de::{IgnoredAny, IntoDeserializer, MapAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
+use rustc_span::{BytePos, Pos as _, SourceFile, Span, SyntaxContext};
+use serde::de::{IgnoredAny, IntoDeserializer as _, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer as _, Serialize as _};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Range;
@@ -796,6 +796,7 @@ define_Conf! {
         filter_map_next,
         from_over_into,
         if_then_some_else_none,
+        implicit_saturating_sub,
         index_refutable_slice,
         inefficient_to_string,
         io_other_error,
@@ -840,6 +841,7 @@ define_Conf! {
         missing_const_for_fn,
         needless_borrow,
         non_std_lazy_statics,
+        nonnull_unchecked_on_box_ptr,
         option_as_ref_deref,
         or_fun_call,
         ptr_as_ptr,
@@ -1177,7 +1179,7 @@ impl serde::de::Error for FieldError {
     fn unknown_field(field: &str, expected: &'static [&'static str]) -> Self {
         // List the available fields sorted and at least one per line, more if `CLIPPY_TERMINAL_WIDTH` is
         // set and allows it.
-        use fmt::Write;
+        use fmt::Write as _;
 
         let metadata = get_configuration_metadata();
         let deprecated = metadata
