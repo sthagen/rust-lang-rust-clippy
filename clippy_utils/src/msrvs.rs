@@ -1,15 +1,15 @@
-use crate::sym;
+use crate::{is_in_const_context, sym};
 use rustc_ast::Attribute;
 use rustc_ast::attr::AttributeExt;
 use rustc_attr_parsing::parse_version;
 use rustc_data_structures::smallvec::SmallVec;
+use rustc_hir::attrs::RustcVersion;
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
-use rustc_hir::{HirId, RustcVersion, StabilityLevel, StableSince};
+use rustc_hir::{Constness, HirId, StabilityLevel, StableSince};
 use rustc_lint::LateContext;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::Session;
-use rustc_span::Symbol;
-use serde::Deserialize;
 use std::iter::once;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -30,7 +30,7 @@ msrv_aliases! {
     1,93,0 { VEC_DEQUE_POP_BACK_IF, VEC_DEQUE_POP_FRONT_IF }
     1,91,0 { DURATION_FROM_MINUTES_HOURS }
     1,89,0 { NONNULL_FROM_MUT }
-    1,88,0 { LET_CHAINS, AS_CHUNKS }
+    1,88,0 { LET_CHAINS, AS_CHUNKS, RAW_PTR_DEFAULT }
     1,87,0 { OS_STR_DISPLAY, INT_MIDPOINT, CONST_CHAR_IS_DIGIT, UNSIGNED_IS_MULTIPLE_OF, INTEGER_SIGN_CAST }
     1,86,0 { VEC_POP_IF }
     1,85,0 { UINT_FLOAT_MIDPOINT, CONST_SIZE_OF_VAL, WAKER_NOOP }
@@ -103,15 +103,10 @@ static SEEN_MSRV_ATTR: AtomicBool = AtomicBool::new(false);
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Msrv(Option<RustcVersion>);
 
-impl<'de> Deserialize<'de> for Msrv {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-        parse_version(Symbol::intern(&v))
-            .map(|v| Self(Some(v)))
-            .ok_or_else(|| serde::de::Error::custom("not a valid Rust version"))
+impl From<Option<RustcVersion>> for Msrv {
+    #[inline]
+    fn from(value: Option<RustcVersion>) -> Self {
+        Self(value)
     }
 }
 
@@ -154,7 +149,6 @@ impl Msrv {
     pub fn meets(self, cx: &LateContext<'_>, required: RustcVersion) -> bool {
         self.current(cx).is_none_or(|msrv| msrv >= required)
     }
-
     /// Checks if a required version from [this module](self) is met at the specified node
     ///
     /// If the crate being linted uses an `#[clippy::msrv]` attribute this will search the parent
@@ -163,25 +157,47 @@ impl Msrv {
         self.at(tcx, node).is_none_or(|msrv| msrv >= required)
     }
 
-    pub fn read_cargo(&mut self, sess: &Session) {
-        let cargo_msrv = std::env::var("CARGO_PKG_RUST_VERSION")
-            .ok()
-            .and_then(|v| parse_version(Symbol::intern(&v)));
+    pub fn is_stable(self, cx: &LateContext<'_>, def_id: DefId) -> bool {
+        self.stability_met(cx, cx.tcx.lookup_stability(def_id).map(|stability| stability.level))
+    }
 
-        match (self.0, cargo_msrv) {
-            (None, Some(cargo_msrv)) => self.0 = Some(cargo_msrv),
-            (Some(clippy_msrv), Some(cargo_msrv)) if clippy_msrv != cargo_msrv => {
-                sess.dcx().warn(format!(
-                    "the MSRV in `clippy.toml` and `Cargo.toml` differ; using `{clippy_msrv}` from `clippy.toml`"
-                ));
-            },
-            _ => {},
+    /// Checks whether `def_id` is `const` and const-stable since a version met by the MSRV.
+    ///
+    /// `def_id` must identify a function-like definition or an impl.
+    ///
+    /// Nothing in the crate being linted carries a const-stability attribute, so `const` fns and
+    /// impls defined there are treated as meeting any MSRV, mirroring
+    /// [`is_stable`](Self::is_stable).
+    pub fn is_const_stable(self, cx: &LateContext<'_>, def_id: DefId) -> bool {
+        let constness = match cx.tcx.def_kind(def_id) {
+            // The constness of a trait impl is not encoded in crate metadata, where `constness`
+            // would decode as its default of `Const`. It is only available from the impl header.
+            DefKind::Impl { of_trait: true } => cx.tcx.impl_trait_header(def_id).constness,
+            _ => cx.tcx.constness(def_id),
+        };
+
+        matches!(constness, Constness::Const { .. })
+            && self.stability_met(
+                cx,
+                cx.tcx.lookup_const_stability(def_id).map(|stability| stability.level),
+            )
+    }
+
+    /// Checks the stability relevant to where we are: const-stability inside a `const` context,
+    /// regular stability everywhere else.
+    ///
+    /// Like [`is_in_const_context`], this requires the `LateContext` to have an enclosing body.
+    pub fn is_stable_or_const_stable(self, cx: &LateContext<'_>, def_id: DefId) -> bool {
+        if is_in_const_context(cx) {
+            self.is_const_stable(cx, def_id)
+        } else {
+            self.is_stable(cx, def_id)
         }
     }
 
-    pub fn is_stable(self, cx: &LateContext<'_>, def_id: DefId) -> bool {
-        cx.tcx.lookup_stability(def_id).is_none_or(|stability| {
-            if let StabilityLevel::Stable { since, .. } = stability.level {
+    fn stability_met(self, cx: &LateContext<'_>, level: Option<StabilityLevel>) -> bool {
+        level.is_none_or(|level| {
+            if let StabilityLevel::Stable { since, .. } = level {
                 let version = match since {
                     StableSince::Version(version) => version,
                     StableSince::Current => RustcVersion::CURRENT,
@@ -206,13 +222,16 @@ pub struct MsrvStack {
     stack: SmallVec<[RustcVersion; 2]>,
 }
 
-impl MsrvStack {
-    pub fn new(initial: Msrv) -> Self {
+impl From<Option<RustcVersion>> for MsrvStack {
+    #[inline]
+    fn from(value: Option<RustcVersion>) -> Self {
         Self {
-            stack: SmallVec::from_iter(initial.0),
+            stack: SmallVec::from_iter(value),
         }
     }
+}
 
+impl MsrvStack {
     pub fn current(&self) -> Option<RustcVersion> {
         self.stack.last().copied()
     }
