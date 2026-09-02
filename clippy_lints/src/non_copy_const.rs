@@ -3,10 +3,9 @@
 // For `declare_interior_mutable_const` there are three strategies used to
 // determine if a value has interior mutability:
 // * A type-based check. This is the least accurate, but can always run.
-// * A const-eval based check. This is the most accurate, but this requires that the value is
-//   defined and does not work with generics.
-// * A HIR-tree based check. This is less accurate than const-eval, but it can be applied to generic
-//   values.
+// * A const-eval based check. This is the most accurate, but this requires that the value is defined and does not work
+//   with generics.
+// * A HIR-tree based check. This is less accurate than const-eval, but it can be applied to generic values.
 //
 // For `borrow_interior_mutable_const` the same three strategies are applied
 // when checking a constant's value, but field and array index projections at
@@ -31,14 +30,13 @@ use rustc_hir::{
     ConstArgKind, ConstItemRhs, Expr, ExprKind, ImplItem, ImplItemKind, Item, ItemKind, Node, StructTailExpr,
     TraitItem, TraitItemKind, UnOp,
 };
-use rustc_lint::{LateContext, LateLintPass, LintContext as _};
+use rustc_lint::{LateContext, LateLintPass, LintContext as _, impl_lint_pass};
 use rustc_middle::mir::{ConstValue, UnevaluatedConst};
 use rustc_middle::ty::adjustment::{Adjust, Adjustment, DerefAdjustKind};
 use rustc_middle::ty::{
     self, EarlyBinder, GenericArgs, GenericArgsRef, Instance, Ty, TyCtxt, TypeFolder, TypeSuperFoldable as _,
     TypeckResults, TypingEnv, Unnormalized,
 };
-use rustc_session::impl_lint_pass;
 use rustc_span::DUMMY_SP;
 use std::collections::hash_map::Entry;
 

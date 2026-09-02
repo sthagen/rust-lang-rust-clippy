@@ -10,8 +10,7 @@ use rustc_errors::Applicability;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Block, Expr, ExprKind, StmtKind};
-use rustc_lint::{LateContext, LateLintPass};
-use rustc_session::declare_lint_pass;
+use rustc_lint::{LateContext, LateLintPass, declare_lint_pass};
 use rustc_span::SyntaxContext;
 
 declare_clippy_lint! {
@@ -249,6 +248,21 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBool {
             && then_val != tail_val
             && wrapper_ctors_match(cx, then_func, tail_func)
         {
+            // If there is another `if _ { return ..; }` before the `if_expr`, don't lint. Replacing the last
+            // `if` won't decrease complexity, without refactoring the entire block.
+            if block.stmts.len() >= 2
+                && let [.., prev_stmt, _] = block.stmts
+                && let StmtKind::Semi(prev_if_expr) | StmtKind::Expr(prev_if_expr) = prev_stmt.kind
+                && let Some(higher::If {
+                    cond: _,
+                    then: prev_then,
+                    r#else: None,
+                }) = higher::If::hir(prev_if_expr)
+                && let ExprKind::Ret(Some(_)) = peel_blocks_with_stmt(prev_then).kind
+            {
+                return;
+            }
+
             let span = if_expr.span.to(tail.span);
             if span_contains_comment(cx, span) {
                 return;

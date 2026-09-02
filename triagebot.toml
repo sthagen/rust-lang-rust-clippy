@@ -1,6 +1,6 @@
 [relabel]
 allow-unauthenticated = [
-    "A-*", "C-*", "E-*", "I-*", "L-*", "P-*", "S-*", "T-*",
+    "A-*", "C-*", "D-*", "E-*", "I-*", "L-*", "P-*", "S-*", "T-*",
     "good first issue", "beta-nominated"
 ]
 
@@ -98,7 +98,6 @@ users_on_vacation = [
     "Alexendoo",
     "y21",
     "ada4a",
-    "samueltardieu"
 ]
 
 [assign.owners]
