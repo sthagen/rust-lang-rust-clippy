@@ -26,6 +26,7 @@ extern crate rustc_abi;
 extern crate rustc_arena;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
+extern crate rustc_attr_ir;
 extern crate rustc_data_structures;
 extern crate rustc_errors;
 extern crate rustc_hir;
@@ -629,7 +630,7 @@ rustc_lint::late_lint_methods!(
         CopyAndPaste: ifs::CopyAndPaste<'tcx> = ifs::CopyAndPaste::new(tcx, conf),
         CopyIterator: copy_iterator::CopyIterator = copy_iterator::CopyIterator,
         UselessFormat: format::UselessFormat = format::UselessFormat::new(format_args.clone()),
-        Swap: swap::Swap = swap::Swap,
+        Swap: swap::Swap = swap::Swap::new(conf),
         PanickingOverflowChecks: panicking_overflow_checks::PanickingOverflowChecks = panicking_overflow_checks::PanickingOverflowChecks,
         NewWithoutDefault: new_without_default::NewWithoutDefault = <new_without_default::NewWithoutDefault>::default(),
         DisallowedNames: disallowed_names::DisallowedNames = disallowed_names::DisallowedNames::new(conf),
