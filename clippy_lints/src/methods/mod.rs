@@ -121,12 +121,14 @@ mod stable_sort_primitive;
 mod str_split;
 mod str_splitn;
 mod string_extend_chars;
+mod string_from_utf8_as_bytes;
 mod string_lit_chars_any;
 mod suspicious_command_arg_space;
 mod suspicious_map;
 mod suspicious_splitn;
 mod suspicious_to_owned;
 mod swap_with_temporary;
+mod trim_split_white_space;
 mod type_id_on_box;
 mod unbuffered_bytes;
 mod uninit_assumed_init;
@@ -703,10 +705,12 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
-    /// Checks for occurrences where one vector gets extended instead of append
+    /// Checks for use of `extend()` and `drain()` methods to transfer items from one `Vec`,
+    /// `VecDeque`, or `BinaryHeap` to another.
     ///
     /// ### Why is this bad?
-    /// Using `append` instead of `extend` is more concise and faster
+    /// Using `append()` instead of `extend()` is more concise, and faster because the
+    /// `append()` method can take advantage of knowledge of the collection’s structure.
     ///
     /// ### Example
     /// ```no_run
@@ -726,7 +730,7 @@ declare_clippy_lint! {
     #[clippy::version = "1.55.0"]
     pub EXTEND_WITH_DRAIN,
     perf,
-    "using vec.append(&mut vec) to move the full range of a vector to another"
+    "use of `extend(other.drain())` to move the contents of a collection is inefficient"
 }
 
 declare_clippy_lint! {
@@ -3811,6 +3815,28 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
+    /// Check if the string is transformed to byte array and casted back to string.
+    ///
+    /// ### Why is this bad?
+    /// It's unnecessary, the string can be used directly.
+    ///
+    /// ### Example
+    /// ```no_run
+    /// std::str::from_utf8(&"Hello World!".as_bytes()[6..11]).unwrap();
+    /// ```
+    ///
+    /// Use instead:
+    /// ```no_run
+    /// &"Hello World!"[6..11];
+    /// ```
+    #[clippy::version = "1.50.0"]
+    pub STRING_FROM_UTF8_AS_BYTES,
+    complexity,
+    "casting string slices to byte slices and back"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
     /// Checks for `<string_lit>.chars().any(|i| i == c)`.
     ///
     /// ### Why is this bad?
@@ -4049,6 +4075,27 @@ declare_clippy_lint! {
 
 declare_clippy_lint! {
     /// ### What it does
+    /// Warns about calling `str::trim` (or variants) before `str::split_whitespace`.
+    ///
+    /// ### Why is this bad?
+    /// `split_whitespace` already ignores leading and trailing whitespace.
+    ///
+    /// ### Example
+    /// ```no_run
+    /// " A B C ".trim().split_whitespace();
+    /// ```
+    /// Use instead:
+    /// ```no_run
+    /// " A B C ".split_whitespace();
+    /// ```
+    #[clippy::version = "1.62.0"]
+    pub TRIM_SPLIT_WHITESPACE,
+    style,
+    "using `str::trim()` or alike before `str::split_whitespace`"
+}
+
+declare_clippy_lint! {
+    /// ### What it does
     /// Looks for calls to `.type_id()` on a `Box<dyn _>`.
     ///
     /// ### Why is this bad?
@@ -4196,7 +4243,7 @@ declare_clippy_lint! {
     /// ### Why is this bad?
     /// In those cases, the `TryInto` and `TryFrom` trait implementation is a blanket impl that forwards
     /// to `Into` or `From`, which always succeeds.
-    /// The returned `Result<_, Infallible>` requires error handling to get the contained value
+    /// The returned `Result<_, !>` requires error handling to get the contained value
     /// even though the conversion can never fail.
     ///
     /// ### Example
@@ -5079,6 +5126,7 @@ impl_lint_pass!(Methods => [
     SOME_FILTER,
     STABLE_SORT_PRIMITIVE,
     STRING_EXTEND_CHARS,
+    STRING_FROM_UTF8_AS_BYTES,
     STRING_LIT_CHARS_ANY,
     STR_SPLIT_AT_NEWLINE,
     SUSPICIOUS_COMMAND_ARG_SPACE,
@@ -5087,6 +5135,7 @@ impl_lint_pass!(Methods => [
     SUSPICIOUS_SPLITN,
     SUSPICIOUS_TO_OWNED,
     SWAP_WITH_TEMPORARY,
+    TRIM_SPLIT_WHITESPACE,
     TYPE_ID_ON_BOX,
     UNBUFFERED_BYTES,
     UNINIT_ASSUMED_INIT,
@@ -5196,6 +5245,7 @@ impl<'tcx> LateLintPass<'tcx> for Methods {
                 swap_with_temporary::check(cx, expr, func, args);
                 ip_constant::check(cx, expr, func, args);
                 clone_on_copy::check_function(cx, expr);
+                string_from_utf8_as_bytes::check_call(cx, expr, func, args);
                 unwrap_expect_used::check_call(
                     cx,
                     expr,
@@ -6001,7 +6051,9 @@ impl Methods {
                 (sym::map_or, [def, map]) => {
                     map_or_identity::check(cx, expr, recv, call_span, def, map);
                 },
-
+                (sym::split_whitespace, []) => {
+                    trim_split_white_space::check(cx, expr, recv, call_span);
+                },
                 (sym::to_string, []) => {
                     inefficient_to_string::check(cx, expr, recv, self.msrv);
                 },
